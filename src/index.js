@@ -17,8 +17,8 @@ app.set('views', PATHS.VIEWS.path)
 app.use('/', ROUTES)
 
 // Post Middlewares
-app.use(notFoundMiddleware())
-app.use(errorHandlerMiddleware())
+app.use(notFoundMiddleware)
+app.use(errorHandlerMiddleware)
 
 app.listen(ENV_CONSTANTS.PORT,()=>{
     console.log(`[SERVER RUNNING] | Server started on port ${ENV_CONSTANTS.PORT}`)

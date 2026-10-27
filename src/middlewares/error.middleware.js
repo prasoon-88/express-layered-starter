@@ -74,7 +74,9 @@ const errorHandlerMiddleware = (err, req, res, next) =>{
     
     errorJsonResp.statusCode = error.statusCode
     
-    return res.status(error.statusCode).render('error', errorJsonResp)
+    return res.status(error.statusCode).render('error', {
+        error: errorJsonResp
+    })
 }
 
 export default errorHandlerMiddleware

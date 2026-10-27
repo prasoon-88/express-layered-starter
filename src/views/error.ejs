@@ -1,0 +1,47 @@
+<%- include('./partials/head') %>
+<%- include('./partials/navbar') %>
+
+<section class="d-flex align-items-center min-vh-95 py-5">
+    <div class="container py-5">
+        <div class="row align-items-center">
+
+            <div class="col-md-6 order-md-2">
+                <div class="lc-block text-center">
+                    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+
+                    <lottie-player
+                        src="https://assets9.lottiefiles.com/packages/lf20_kcsr6fcp.json"
+                        background="transparent"
+                        speed="1"
+                        loop
+                        autoplay>
+                    </lottie-player>
+                </div>
+            </div>
+
+            <div class="col-md-6 text-center text-md-start">
+
+                <div class="lc-block mb-3">
+                    <h1 class="display-1 fw-bold text-muted">
+                        Error <%= locals?.error?.statusCode ?? 500 %>
+                    </h1>
+                </div>
+
+                <div class="lc-block mb-5">
+                    <p class="rfs-11 fw-light">
+                        <%= locals?.error?.message ?? 'An unexpected error occurred.' %>
+                    </p>
+                </div>
+
+                <div class="lc-block">
+                    <a class="btn btn-lg btn-secondary" href="/" role="button">
+                        Back to homepage
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+<%- include('./partials/footer') %>

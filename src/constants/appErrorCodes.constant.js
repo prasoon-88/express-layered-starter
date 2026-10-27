@@ -1,4 +1,4 @@
-import ERROR_CODES from "./errorCodes.constant";
+import ERROR_CODES from "./errorCodes.constant.js";
 
 const APP_ERROR_CODES = Object.freeze({
   ...ERROR_CODES,
