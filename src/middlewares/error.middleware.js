@@ -1,5 +1,5 @@
 import { AppError, InternalServerError } from "#errors"
-import { convertError } from "#errors/converter"
+import { convertError } from "#errors/converter/index.js"
 
 const toUnknownError = (err) => {
     const unknownError = new InternalServerError()

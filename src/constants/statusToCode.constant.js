@@ -1,3 +1,6 @@
+import ERROR_CODES from "./errorCodes.constant.js"
+import HTTP_STATUS from "./httpStatus.constant.js"
+
 const STATUS_TO_CODE = {
     [HTTP_STATUS.BAD_REQUEST]: ERROR_CODES.BAD_REQUEST,
     [HTTP_STATUS.UNAUTHORIZED]: ERROR_CODES.UNAUTHORIZED,

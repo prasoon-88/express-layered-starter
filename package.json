@@ -15,6 +15,7 @@
     "#constants/*": "./src/constants/*",
     "#controllers/*": "./src/controllers/*",
     "#errors": "./src/errors/index.js",
+    "#errors/*": "./src/errors/*",
     "#middlewares/*": "./src/middlewares/*",
     "#models/*": "./src/models/*",
     "#repository/*": "./src/repository/*",
