@@ -13,6 +13,7 @@
   "imports": {
     "#config/*": "./src/config/*",
     "#constants/*": "./src/constants/*",
+    "#contexts/*": "./src/contexts/*",
     "#controllers/*": "./src/controllers/*",
     "#errors": "./src/errors/index.js",
     "#errors/*": "./src/errors/*",

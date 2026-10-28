@@ -4,6 +4,7 @@ import ENV_CONSTANTS from '#constants/env.constant.js'
 import ROUTES from '#routes/index.js'
 import notFoundMiddleware from '#middlewares/notFound.middleware.js'
 import errorHandlerMiddleware from '#middlewares/error.middleware.js'
+import requestIdMiddleware from '#middlewares/requestId.middleware.js'
 
 const app = express()
 
@@ -12,6 +13,7 @@ app.set('view engine','ejs')
 app.set('views', PATHS.VIEWS.path)
 
 // Pre Middlewares
+app.use(requestIdMiddleware())
 
 // Routes
 app.use('/', ROUTES)
