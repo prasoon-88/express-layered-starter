@@ -26,6 +26,7 @@
                         Error <%= locals?.error?.statusCode ?? 500 %>
                     </h1>
                 </div>
+                <% if (error.requestId) { %><small>Reference: <%= error.requestId %></small><% } %>
 
                 <div class="lc-block mb-5">
                     <p class="rfs-11 fw-light">

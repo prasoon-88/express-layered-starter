@@ -5,6 +5,7 @@ import ROUTES from '#routes/index.js'
 import notFoundMiddleware from '#middlewares/notFound.middleware.js'
 import errorHandlerMiddleware from '#middlewares/error.middleware.js'
 import requestIdMiddleware from '#middlewares/requestId.middleware.js'
+import httpLoggerMiddleware from '#middlewares/httpLogger.middleware.js'
 
 const app = express()
 
@@ -14,6 +15,7 @@ app.set('views', PATHS.VIEWS.path)
 
 // Pre Middlewares
 app.use(requestIdMiddleware())
+app.use(httpLoggerMiddleware())
 
 // Routes
 app.use('/', ROUTES)

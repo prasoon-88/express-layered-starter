@@ -35,6 +35,7 @@ const errorHandlerMiddleware = (err, req, res, next) =>{
             success: false,
             code: error.code,
             message: error.message,
+            requestId: req.id,
             ...(error.details && { details: error.details }),
             ...(process.env.NODE_ENV !== 'production' && { stack: source.stack })
         }
