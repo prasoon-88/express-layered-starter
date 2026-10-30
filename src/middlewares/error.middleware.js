@@ -1,5 +1,6 @@
 import { AppError, InternalServerError } from "#errors"
 import { convertError } from "#errors/converter/index.js"
+import logger from '#lib/logger/index.js'
 
 const toUnknownError = (err) => {
     const unknownError = new InternalServerError()
@@ -39,6 +40,14 @@ const errorHandlerMiddleware = (err, req, res, next) =>{
             ...(error.details && { details: error.details }),
             ...(process.env.NODE_ENV !== 'production' && { stack: source.stack })
         }
+    
+    logger.error({
+        err: source,
+        requestId: req.id,
+        code: error.code,
+        statusCode: error.statusCode,
+        isOperational: error.isOperational,
+    }, "Request Failed");
 
     if(wantsJson(req)) return res.status(error.statusCode).json(errorJsonResp)
     
