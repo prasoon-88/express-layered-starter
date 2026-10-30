@@ -28,7 +28,6 @@ const normalizeTotal = (total) => {
     return n
 }
 
-
 const parse = ({page, pageSize}={})=>{
     const safePage = toIntStrict(page, {field: "page", min: 1, max: PAGINATION_LIMITS.MAX_PAGE, fallback : PAGINATION_LIMITS.PAGE})
     const safePageSize = toIntStrict(pageSize, {field: "pageSize", min: 1, max: PAGINATION_LIMITS.MAX_PAGE_SIZE, fallback : PAGINATION_LIMITS.PAGE_SIZE})
