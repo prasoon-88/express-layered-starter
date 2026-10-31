@@ -84,7 +84,8 @@ express-layered-starter/
 ├── .env                 # env config (gitignored)
 ├── package.json         # deps + subpath import aliases
 └── src/
-    ├── index.js         # entry point — wires middleware and routes
+    ├── app.js           # builds the Express app — middleware + routes, no listen()
+    ├── server.js        # entry point — starts the HTTP server
     ├── config/          # tunable settings, derived from env
     ├── constants/       # fixed values that never change
     ├── contexts/        # AsyncLocalStorage — request-scoped state
@@ -193,7 +194,7 @@ Every response carries the same envelope:
 
 ## Roadmap
 
-- [x] Layered skeleton, wired entry point
+- [x] Layered skeleton, `app.js` / `server.js` split
 - [x] Request IDs + async context
 - [x] Structured logging + HTTP access logs
 - [x] Error hierarchy, converters, central handler

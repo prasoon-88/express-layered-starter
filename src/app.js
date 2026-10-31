@@ -1,6 +1,5 @@
 import express from 'express'
 import PATHS from '#constants/path.constant.js'
-import ENV_CONSTANTS from '#constants/env.constant.js'
 import ROUTES from '#routes/index.js'
 import notFoundMiddleware from '#middlewares/notFound.middleware.js'
 import errorHandlerMiddleware from '#middlewares/error.middleware.js'
@@ -24,6 +23,4 @@ app.use('/', ROUTES)
 app.use(notFoundMiddleware)
 app.use(errorHandlerMiddleware)
 
-app.listen(ENV_CONSTANTS.PORT,()=>{
-    console.log(`[SERVER RUNNING] | Server started on port ${ENV_CONSTANTS.PORT}`)
-})
+export default app

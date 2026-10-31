@@ -17,7 +17,7 @@
 
 ## The pipeline
 
-Order matters more here than anywhere else in the codebase. From [`index.js`](../index.js):
+Order matters more here than anywhere else in the codebase. From [`app.js`](../app.js):
 
 ```
 requestId      →  assign req.id, open the async context
