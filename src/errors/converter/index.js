@@ -1,8 +1,7 @@
 import httpConverter from './http.converter.js'
 import jwtConverter from './jwt.converter.js'
-import mongooseConverter from './mongoose.converter.js'
 
-const converters = [httpConverter, mongooseConverter, jwtConverter]
+const converters = [httpConverter, jwtConverter]
 
 export const convertError = (err) =>{
     for(const converter of converters){
