@@ -117,7 +117,7 @@ errors/      ← may use constants
    ↑
 contexts/    ← depends on nothing (node:async_hooks only)
    ↑
-lib/         ← may use config + constants + contexts
+lib/         ← may use config + constants + contexts (+ leaf utils)
    ↑
 utils/       ← may use config + constants + errors + lib
    ↑
@@ -131,6 +131,8 @@ routes/      ← uses controllers + middlewares
 ```
 
 **Dependencies point downward only.** A lower layer must never import an upper layer (e.g. a service never imports a controller) — that creates circular dependencies and breaks reusability.
+
+**One exception: leaf utils.** A util with **no imports of its own** (such as [`sleep.util.js`](utils/sleep.util.js)) sits at the bottom of the graph and may be used by any layer, including `lib/`. It cannot create a cycle because it depends on nothing. A util that imports `lib/` (like `apiResponse.util.js`) is not a leaf and stays above it.
 
 Imports across folders use the subpath aliases declared in `package.json`:
 

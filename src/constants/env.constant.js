@@ -8,7 +8,8 @@ const ENV_CONSTANTS = {
     LOG_PRETTY: process.env.LOG_PRETTY === 'true',
     LOG_IGNORE_PATHS: list(process.env.LOG_IGNORE_PATHS, "/health,/favicon.ico"),
     LOG_SLOW_MS: Number(process.env.LOG_SLOW_MS || 1000),
-    SHUTDOWN_TIMEOUT_MS: Number(process.env.SHUTDOWN_TIMEOUT_MS || 8000)
+    SHUTDOWN_TIMEOUT_MS: Number(process.env.SHUTDOWN_TIMEOUT_MS || 8000),
+    SHUTDOWN_DELAY_MS:  Number(process.env.SHUTDOWN_DELAY_MS || 5000),
 }
 
 export default ENV_CONSTANTS

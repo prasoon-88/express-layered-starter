@@ -59,10 +59,13 @@ LOG_IGNORE_PATHS=/health,/favicon.ico   # paths excluded from access logs
 LOG_SLOW_MS=1000                        # requests at or above this are logged as warnings
 
 # Shutdown
-SHUTDOWN_TIMEOUT_MS=8000                # max ms to let in-flight requests finish before forcing exit
+SHUTDOWN_TIMEOUT_MS=8000                # total budget (ms) before a stuck shutdown is force-killed
+SHUTDOWN_DELAY_MS=5000                  # ms to keep serving after SIGTERM/SIGINT so load balancers can drain us (0 = none)
 ```
 
 Every variable has a fallback in [`src/constants/env.constant.js`](src/constants/env.constant.js), so the app boots with an empty `.env`.
+
+`SHUTDOWN_DELAY_MS` must be smaller than `SHUTDOWN_TIMEOUT_MS`, or the app refuses to start. Set it to `0` locally so Ctrl+C exits at once; see [`src/lib/README.md`](src/lib/README.md#lifecycle) for tuning per platform.
 
 ### Run
 

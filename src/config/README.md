@@ -41,7 +41,7 @@ export const authConfig = Object.freeze({
 
 The convention here: one file per concern (`logger.config.js`, `auth.config.js`), a named `Object.freeze`d export, `camelCase` keys. Frozen because a setting that can be reassigned at runtime is a bug waiting to happen.
 
-See [`logger.config.js`](logger.config.js) for a working example — it derives `pretty` from the environment and holds the list of field names the logger redacts.
+See [`logger.config.js`](logger.config.js) for a working example — it derives `pretty` from the environment and holds the list of field names the logger redacts. [`lifecycle.config.js`](lifecycle.config.js) is the minimal case: two shutdown timings, nothing else.
 
 ## Rule of thumb
 > Config = tunable settings (might differ dev vs prod). Can import from `constants/`, but `constants/` must never import from config. Never commit a secret here — read it from `.env`.

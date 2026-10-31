@@ -42,6 +42,17 @@ const { items, paging } = await Paginator.paginate(req.query, postRepository.fin
 
 `parse()` gives you `{ page, pageSize, offset }` if you want to drive the query yourself.
 
+### `sleep.util.js`
+`sleep(ms)` returns a promise that resolves after `ms` milliseconds. [`lib/lifecycle`](../lib/lifecycle/) uses it for the drain delay.
+
+```js
+import { sleep } from '#utils/sleep.util.js'
+
+await sleep(5000)
+```
+
+It has **no imports**, which is what lets `lib/` use it without breaking the dependency order (see the leaf rule in [`src/README.md`](../README.md#dependency-rules-what-may-import-what)). It can't be cancelled; for that, use `setTimeout` from `node:timers/promises` with an `AbortSignal`.
+
 ## Example
 ```js
 // utils/slug.js

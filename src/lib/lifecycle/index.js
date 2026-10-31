@@ -1,5 +1,7 @@
 import { lifecycleConfig } from '#config/lifecycle.config.js'
 import { getLogger } from '#lib/logger/index.js'
+import { sleep } from '#utils/sleep.util.js'
+import lifecycleState from './state.js'
 
 const toError = (value) => value instanceof Error ? value : new Error(String(value))
 
@@ -9,17 +11,19 @@ export const registerProcessHandler = (
         hooks= [],
         logger= getLogger("lifecycle"),
         timeoutMs= lifecycleConfig.shutdownTimeoutMs,
+        drainDelayMs= lifecycleConfig.drainDelayMs,
         proc= process,
         exit= (code) => process.exit(code)
     } = {}
 ) => {
     if (!server) throw new TypeError('registerProcessHandler: `server` is required')
+    if (!(drainDelayMs < timeoutMs)) throw new RangeError(`drainDelayMs (${drainDelayMs}) must be less than timeoutMs (${timeoutMs})`)
 
-    let shuttingDown = false
+    let isCrashed = false
 
     const closeServer = () => new Promise((resolve, reject)=>{
         server.close((err)=>{
-            if(err && err.code != 'ERR_SERVER_NOT_RUNNING') return reject(err)
+            if(err && err.code !== 'ERR_SERVER_NOT_RUNNING') return reject(err)
             resolve()
         })
         server.closeIdleConnections?.()
@@ -39,9 +43,9 @@ export const registerProcessHandler = (
         return failed
     }
 
-    const shutdown = async(reason, exitCode) => {
-        if(shuttingDown) return
-        shuttingDown = true
+    const shutdown = async(reason, exitCode, {drain = false} = {}) => {
+        if(lifecycleState.isShuttingDown()) return
+        lifecycleState.markShutdown()
         
         const timer = setTimeout(()=>{
             logger.error({ reason, timeoutMs }, "graceful shutdown timed out, forcing exit")
@@ -50,6 +54,7 @@ export const registerProcessHandler = (
         }, timeoutMs)
 
         try{
+            if(drain && drainDelayMs) await sleep(drainDelayMs)
             await closeServer()
             if(await runHooks()) exitCode = 1
         }catch(err){
@@ -58,26 +63,33 @@ export const registerProcessHandler = (
         }
 
         clearTimeout(timer)
-        exit(exitCode)
+        exit(isCrashed? 1 :exitCode)
     }
 
     const onSignal = (signal) => {
-        if(shuttingDown){
+        if(lifecycleState.isShuttingDown()){
             logger.warn({ signal }, 'second signal received, forcing exit')
             return exit(1)
         }
         logger.info({ signal }, 'signal received, shutting down')
-        shutdown(signal, 0)
+        shutdown(signal, 0, { drain: true }).catch((err)=>{
+            logger.fatal({ err }, 'shutdown failed')
+            exit(1)
+        })
     }
 
     const onCrash = (label) => (value) => {
         const err = toError(value)
-        if (shuttingDown) {
+        if (lifecycleState.isShuttingDown()) {
+            isCrashed = true
             logger.error({ err }, `${label} during shutdown`)
             return
         }
         logger.fatal({err}, label)
-        shutdown(label, 1)
+        shutdown(label, 1).catch((err)=>{
+            logger.fatal({ err }, 'shutdown failed')
+            exit(1)
+        })
     }
 
     server.on('error', onCrash('server error'))
@@ -86,5 +98,5 @@ export const registerProcessHandler = (
     proc.on('unhandledRejection', onCrash("unhandled rejection"))
     proc.on('uncaughtException', onCrash("uncaught exception"))
 
-    return { shutdown, isShuttingDown: () => shuttingDown }
+    return { shutdown }
 }
