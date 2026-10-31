@@ -1,3 +1,4 @@
+import ENV_CONSTANTS from "#constants/env.constant.js"
 import { AppError, InternalServerError } from "#errors"
 import { convertError } from "#errors/converter/index.js"
 import logger from '#lib/logger/index.js'
@@ -22,13 +23,12 @@ const normalizeError = (err) =>{
 
 const wantsJson = (req) => req.originalUrl.startsWith('/api') ||
                            req.xhr ||
-                           req.accepts(['html', 'json']) === 'json'
+                           req.accepts(['json', 'html']) === 'json'
 
 const errorHandlerMiddleware = (err, req, res, next) =>{
     if (res.headersSent) return next(err);                        
 
     const error = normalizeError(err)
-    if(!error.isOperational) console.error(error.originalError)
 
     const source = error.originalError ?? error
 
@@ -38,10 +38,12 @@ const errorHandlerMiddleware = (err, req, res, next) =>{
             message: error.message,
             requestId: req.id,
             ...(error.details && { details: error.details }),
-            ...(process.env.NODE_ENV !== 'production' && { stack: source.stack })
+            ...(ENV_CONSTANTS.ENV !== 'production' && { stack: source.stack })
         }
     
-    logger.error({
+    const level = error.isOperational ? 'warn' : 'error'
+
+    logger[level]({
         err: source,
         requestId: req.id,
         code: error.code,

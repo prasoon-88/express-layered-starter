@@ -20,7 +20,7 @@ The controller should read like a short script: get input → call service → s
 ```js
 // controllers/api/post.controller.js
 import postService from '#services/post.service.js'
-import apiResponse from '#utils/apiResponse.util.js'
+import { apiResponse } from '#utils/apiResponse.util.js'
 
 export const getPost = async (req, res, next) => {
     try {

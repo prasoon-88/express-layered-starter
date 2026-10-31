@@ -61,7 +61,7 @@ const pagination = (res, items, { total, page, pageSize }, options) => send(res,
     })
 })
 
-const apiResponse = {
+export const apiResponse = {
     ok,
     created,
     accepted,
@@ -69,5 +69,3 @@ const apiResponse = {
     redirect,
     pagination
 }
-
-export default apiResponse

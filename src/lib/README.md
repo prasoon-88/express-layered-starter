@@ -120,7 +120,7 @@ Tuning:
 
 #### The shared flag
 
-`lifecycleState.isShuttingDown()` is `true` from the moment shutdown starts. Anything that needs to answer "are we stopping?" reads it — a readiness endpoint should return `503` while it is `true`, which is what tells the load balancer to stop routing here. Only `lifecycle/index.js` calls `markShutdown()`.
+`lifecycleState.isShuttingDown()` is `true` from the moment shutdown starts. Anything that needs to answer "are we stopping?" reads it — the readiness endpoint ([`routes/health/`](../routes/health/)) returns `503` while it is `true`, which tells the load balancer to stop routing here. Only `lifecycle/index.js` calls `markShutdown()`.
 
 The flag is process-wide, so a second `registerProcessHandler` call in the same process sees it as already set. Exercise each scenario in its own process until the module keeps its own local flag.
 

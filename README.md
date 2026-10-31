@@ -16,6 +16,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Uniform success/error response envelope | [`apiResponse.util.js`](src/utils/apiResponse.util.js) |
 | Validated pagination (parse, clamp, build meta) | [`paginator.util.js`](src/utils/paginator.util.js) |
 | Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.js`](src/server.js) |
+| Health checks (liveness + readiness) | [`routes/health/`](src/routes/health/) · [`controllers/health/`](src/controllers/health/) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
 
 ## Tech stack
@@ -170,7 +171,7 @@ The handler normalizes anything thrown — including framework errors from JWT o
 ## Responses
 
 ```js
-import apiResponse from '#utils/apiResponse.util.js'
+import { apiResponse } from '#utils/apiResponse.util.js'
 
 apiResponse.ok(res, user)
 apiResponse.created(res, user, { message: 'User registered' })
@@ -182,6 +183,32 @@ Every response carries the same envelope:
 ```json
 { "success": true, "message": "Success", "data": {}, "requestId": "3f2b…" }
 ```
+
+## Health checks
+
+Two endpoints the platform polls, plus a plain alias:
+
+| Route | Question it answers | Running | Draining (after SIGTERM/SIGINT) |
+|-------|---------------------|:---:|:---:|
+| `GET /health/live` | Is the process alive? | `200` | **`200`** |
+| `GET /health/ready` | Should it receive traffic? | `200` | **`503`** |
+| `GET /health` | alias for `/ready` | `200` | `503` |
+
+They live in [`routes/health/`](src/routes/health/) and [`controllers/health/`](src/controllers/health/), mounted **first** in [`routes/index.js`](src/routes/index.js) and already in the logger's ignore list, so probes never clutter the access log.
+
+### Why two endpoints
+
+Liveness and readiness fail for different reasons and the platform reacts differently to each:
+
+- **Liveness failing → restart the process.** So it checks only things a restart could fix, and stays `200` even while shutting down. If it returned `503` during a drain, the platform could kill the process mid-shutdown and cut in-flight requests. (This is also why a database check must *never* go in liveness — an outage would restart every instance in a loop that can't fix anything.)
+- **Readiness failing → stop sending traffic, but leave the process running.** It returns `503` the moment [`lifecycleState.isShuttingDown()`](src/lib/lifecycle/state.js) flips. Combined with the drain delay (see [`src/lib/README.md`](src/lib/README.md#lifecycle)), this is what lets a rolling deploy move traffic off an instance before it closes — zero dropped requests. Later, a database or dependency check goes **here**.
+
+### Design notes
+
+- **No auth, no rate limiting in front of them.** A probe carries no credentials and must never get a `401` or `429`, which is why they mount before anything like that is added.
+- **Probes get JSON, not an HTML error page.** The error handler negotiates `application/json` first (see [`wantsJson`](src/middlewares/error.middleware.js)), so a `Accept: */*` probe — which is what kubelet and `curl` send — receives the JSON envelope. The draining `503` is logged at `warn`, not `error`, because shutting down is expected, not a fault.
+
+In Kubernetes these map to the **startup**, **liveness** and **readiness** probes; set `SHUTDOWN_DELAY_MS` longer than the readiness probe interval so the drain outlasts one failed probe. The per-platform numbers are in [`src/lib/README.md`](src/lib/README.md#lifecycle).
 
 ## Conventions
 
@@ -211,6 +238,6 @@ Every response carries the same envelope:
 - [ ] Mount `helmet` and CORS
 - [ ] Input validation at the controller boundary
 - [ ] Auth: register / login with JWT
-- [ ] Health check endpoint
+- [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
 - [ ] Tests

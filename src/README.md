@@ -59,7 +59,7 @@ postRouter.get('/posts/:id', postController.getPost)
 
 ```js
 // controllers/api/post.controller.js — HTTP only
-import apiResponse from '#utils/apiResponse.util.js'
+import { apiResponse } from '#utils/apiResponse.util.js'
 
 export const getPost = async (req, res, next) => {
     try {
