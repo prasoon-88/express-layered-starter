@@ -14,8 +14,8 @@
 
 ## Example
 ```js
-// services/post.service.js
-import postRepository from '#repository/post.repository.js'
+// services/post.service.ts
+import postRepository from '#repository/post.repository'
 import { BadRequestError, ConflictError } from '#errors'
 
 const createPost = async ({ title, body, authorId }) => {
@@ -36,7 +36,7 @@ export default { createPost }
 
 ## Logging from a service
 ```js
-import { getLogger } from '#lib/logger/index.js'
+import { getLogger } from '#lib/logger/index'
 
 const logger = getLogger('post.service')
 

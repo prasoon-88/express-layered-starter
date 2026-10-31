@@ -18,19 +18,19 @@
 ```
 .env                      actual values (gitignored)
   ↓ process.env.X
-constants/env.constant.js reads process.env once, applies defaults, coerces types
+constants/env.constant.ts reads process.env once, applies defaults, coerces types
   ↓ ENV_CONSTANTS.X
 config/                   shapes it into a settings object per concern   ← YOU ARE HERE
   ↓ someConfig.x
 your code                 never touches process.env directly
 ```
 
-Note the extra step: **`env.constant.js` is the only file in the app that reads `process.env`.** Config files import from it rather than reaching for the environment themselves, so every variable has exactly one declared default and one place to look it up.
+Note the extra step: **`env.constant.ts` is the only file in the app that reads `process.env`.** Config files import from it rather than reaching for the environment themselves, so every variable has exactly one declared default and one place to look it up.
 
 ## Example
 ```js
-// config/auth.config.js
-import ENV_CONSTANTS from '#constants/env.constant.js'
+// config/auth.config.ts
+import ENV_CONSTANTS from '#constants/env.constant'
 
 export const authConfig = Object.freeze({
     jwtSecret: ENV_CONSTANTS.JWT_SECRET,      // from .env, never hardcoded
@@ -39,9 +39,9 @@ export const authConfig = Object.freeze({
 })
 ```
 
-The convention here: one file per concern (`logger.config.js`, `auth.config.js`), a named `Object.freeze`d export, `camelCase` keys. Frozen because a setting that can be reassigned at runtime is a bug waiting to happen.
+The convention here: one file per concern (`logger.config.ts`, `auth.config.ts`), a named `Object.freeze`d export, `camelCase` keys. Frozen because a setting that can be reassigned at runtime is a bug waiting to happen.
 
-See [`logger.config.js`](logger.config.js) for a working example — it derives `pretty` from the environment and holds the list of field names the logger redacts. [`lifecycle.config.js`](lifecycle.config.js) is the minimal case: two shutdown timings, nothing else.
+See [`logger.config.ts`](logger.config.ts) for a working example — it derives `pretty` from the environment and holds the list of field names the logger redacts. [`lifecycle.config.ts`](lifecycle.config.ts) is the minimal case: two shutdown timings, nothing else.
 
 ## Rule of thumb
 > Config = tunable settings (might differ dev vs prod). Can import from `constants/`, but `constants/` must never import from config. Never commit a secret here — read it from `.env`.

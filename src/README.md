@@ -53,13 +53,13 @@ errorHandler    normalize → log → respond (JSON for /api, rendered view othe
 ## A feature across all layers (example: get one post)
 
 ```js
-// routes/api/v1/post.routes.js
+// routes/api/v1/post.routes.ts
 postRouter.get('/posts/:id', postController.getPost)
 ```
 
 ```js
-// controllers/api/post.controller.js — HTTP only
-import { apiResponse } from '#utils/apiResponse.util.js'
+// controllers/api/post.controller.ts — HTTP only
+import { apiResponse } from '#utils/apiResponse.util'
 
 export const getPost = async (req, res, next) => {
     try {
@@ -72,7 +72,7 @@ export const getPost = async (req, res, next) => {
 ```
 
 ```js
-// services/post.service.js — the rules
+// services/post.service.ts — the rules
 import { NotFoundError } from '#errors'
 
 export const getPostById = async (id) => {
@@ -83,7 +83,7 @@ export const getPostById = async (id) => {
 ```
 
 ```js
-// repository/post.repository.js — raw DB
+// repository/post.repository.ts — raw DB
 export const findById = (id) => Post.findById(id)
 ```
 
@@ -132,16 +132,16 @@ routes/      ← uses controllers + middlewares
 
 **Dependencies point downward only.** A lower layer must never import an upper layer (e.g. a service never imports a controller) — that creates circular dependencies and breaks reusability.
 
-**One exception: leaf utils.** A util with **no imports of its own** (such as [`sleep.util.js`](utils/sleep.util.js)) sits at the bottom of the graph and may be used by any layer, including `lib/`. It cannot create a cycle because it depends on nothing. A util that imports `lib/` (like `apiResponse.util.js`) is not a leaf and stays above it.
+**One exception: leaf utils.** A util with **no imports of its own** (such as [`sleep.util.ts`](utils/sleep.util.ts)) sits at the bottom of the graph and may be used by any layer, including `lib/`. It cannot create a cycle because it depends on nothing. A util that imports `lib/` (like `apiResponse.util.ts`) is not a leaf and stays above it.
 
 Imports across folders use the subpath aliases declared in `package.json`:
 
 ```js
-import userService from '#services/user.service.js'
+import userService from '#services/user.service'
 import { NotFoundError } from '#errors'
 ```
 
-Never `../../services/user.service.js`. The alias keeps a file's imports stable when it moves.
+Never `../../services/user.service.ts`. The alias keeps a file's imports stable when it moves.
 
 ## Two things that are not layers
 

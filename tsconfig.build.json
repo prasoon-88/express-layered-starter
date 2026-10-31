@@ -1,0 +1,16 @@
+{
+  // Production build: compiles src/**/*.ts -> dist/**/*.js. Same rules as tsconfig.json.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "sourceMap": true,
+    // A type error means no dist output at all, never a half-broken build.
+    "noEmitOnError": true,
+    // Off on purpose: `clean` deletes dist, and a stale .tsbuildinfo would make tsc skip emitting.
+    "incremental": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
+}

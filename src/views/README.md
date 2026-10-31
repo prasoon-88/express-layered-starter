@@ -29,7 +29,7 @@ export const showPost = async (req, res) => {
 ```
 
 ## Setup reminder
-These are registered in [`app.js`](../app.js), using the path constants rather than `__dirname` (which does not exist in ES modules):
+These are registered in [`app.ts`](../app.ts), using the path constants rather than `__dirname` (which does not exist in ES modules):
 ```js
 app.set('view engine', 'ejs')
 app.set('views', PATHS.VIEWS.path)

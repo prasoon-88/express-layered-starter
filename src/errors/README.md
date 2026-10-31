@@ -6,11 +6,11 @@
 
 - Error classes extending `AppError` (one per HTTP failure category)
 - Converters in [`converter/`](converter/) that translate *foreign* errors (JWT, database drivers, Express) into our classes
-- The barrel export in `index.js`
+- The barrel export in `index.ts`
 
 ## What does NOT go here
 
-- ❌ Response formatting or `res.status(...)` — that's [`middlewares/error.middleware.js`](../middlewares/error.middleware.js)
+- ❌ Response formatting or `res.status(...)` — that's [`middlewares/error.middleware.ts`](../middlewares/error.middleware.ts)
 - ❌ Logging — the handler logs once, centrally
 - ❌ Business rules about *when* to fail — that's `services/`
 
@@ -58,22 +58,22 @@ throw new UnprocessableEntityError('Validation failed', ERROR_CODES.VALIDATION_F
 A converter takes an unknown error and returns one of our classes, or `null` if it doesn't recognize it. That's how a driver-specific error becomes a clean 409 without the service ever importing the driver:
 
 ```js
-// converter/jwt.converter.js
+// converter/jwt.converter.ts
 const jwtConverter = (err) => {
     if (err.name === 'TokenExpiredError') return new UnauthorizedError('Token expired')
     return null
 }
 ```
 
-Converters run in order until one returns something. Add a new one to the array in [`converter/index.js`](converter/index.js).
+Converters run in order until one returns something. Add a new one to the array in [`converter/index.ts`](converter/index.ts).
 
 > The database-specific converter lives on the branch for that database, not on `main`.
 
 ## Adding a new error type
 
-1. Create `yourCase.error.js` extending `AppError` with a fixed status and default code.
-2. Add its code to [`constants/errorCodes.constant.js`](../constants/errorCodes.constant.js).
-3. Export it from `index.js`.
+1. Create `yourCase.error.ts` extending `AppError` with a fixed status and default code.
+2. Add its code to [`constants/errorCodes.constant.ts`](../constants/errorCodes.constant.ts).
+3. Export it from `index.ts`.
 
 ## Rule of thumb
 

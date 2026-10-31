@@ -1,0 +1,41 @@
+{
+  // Type-check config: used by the editor, `pnpm typecheck`, and typed ESLint.
+  // It never writes files. Emitting JS is tsconfig.build.json's job.
+  "compilerOptions": {
+    // --- Runtime: Node 26 (keep in sync with .nvmrc and package.json "engines") ---
+    "target": "es2024",
+    "lib": ["es2024"],
+    "types": ["node"],
+
+    // --- Modules: real Node ESM semantics ---
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // `#alias` imports resolve to src/*.ts through this condition (see package.json "imports").
+    "customConditions": ["app-source"],
+    // Relative imports are written as ./file.ts (what Node runs in dev) and emitted as ./file.js.
+    "rewriteRelativeImportExtensions": true,
+    // Only syntax Node can strip (no enums, namespaces, parameter properties), so dev runs src/*.ts directly.
+    "erasableSyntaxOnly": true,
+    // Type-only imports must say `import type`, so nothing is silently dropped or kept.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+
+    // --- Strictness ---
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUncheckedSideEffectImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // --- Output / speed ---
+    "noEmit": true,
+    "skipLibCheck": true,
+    "incremental": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsc/typecheck.tsbuildinfo"
+  },
+  "include": ["src"]
+}

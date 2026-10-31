@@ -20,23 +20,23 @@
 |---|---|---|
 | Wraps an external system? | ✅ Yes | ❌ No |
 | Has setup / connections / credentials? | ✅ Yes | ❌ Pure functions |
-| Example | `logger/`, `mailer.js`, `s3.js` | `slugify()`, `paginator` |
+| Example | `logger/`, `mailer.ts`, `s3.ts` | `slugify()`, `paginator` |
 
 ## What's here
 
 ### `logger/`
 
-A [pino](https://getpino.io/) instance configured from [`config/logger.config.js`](../config/logger.config.js):
+A [pino](https://getpino.io/) instance configured from [`config/logger.config.ts`](../config/logger.config.ts):
 
 - **Structured JSON** in production, pretty-printed in development (falls back to JSON if `pino-pretty` isn't installed, rather than crashing)
-- **Automatic request IDs** via a `mixin` that reads [`contexts/requestContext.js`](../contexts/requestContext.js) — no `req` passed anywhere
+- **Automatic request IDs** via a `mixin` that reads [`contexts/requestContext.ts`](../contexts/requestContext.ts) — no `req` passed anywhere
 - **Redaction** of passwords, tokens, cookies, and auth headers before they ever reach a log sink
 - **Base fields** on every line: service, env, pid, hostname
 
 Use a child logger per file so every line says where it came from:
 
 ```js
-import { getLogger } from '#lib/logger/index.js'
+import { getLogger } from '#lib/logger/index'
 
 const logger = getLogger('user.service')
 
@@ -55,13 +55,13 @@ Owns how the process stops, and how it fails. Two files:
 
 | File | Role |
 |------|------|
-| `index.js` | `registerProcessHandler` — the signal, crash and shutdown logic |
-| `state.js` | `lifecycleState` — the shutdown flag, published so other code can read it |
+| `index.ts` | `registerProcessHandler` — the signal, crash and shutdown logic |
+| `state.ts` | `lifecycleState` — the shutdown flag, published so other code can read it |
 
-Call `registerProcessHandler` **once**, from [`server.js`](../server.js), right after `app.listen()`:
+Call `registerProcessHandler` **once**, from [`server.ts`](../server.ts), right after `app.listen()`:
 
 ```js
-import { registerProcessHandler } from '#lib/lifecycle/index.js'
+import { registerProcessHandler } from '#lib/lifecycle/index'
 
 const server = app.listen(PORT)
 
@@ -120,24 +120,24 @@ Tuning:
 
 #### The shared flag
 
-`lifecycleState.isShuttingDown()` is `true` from the moment shutdown starts. Anything that needs to answer "are we stopping?" reads it — the readiness endpoint ([`routes/health/`](../routes/health/)) returns `503` while it is `true`, which tells the load balancer to stop routing here. Only `lifecycle/index.js` calls `markShutdown()`.
+`lifecycleState.isShuttingDown()` is `true` from the moment shutdown starts. Anything that needs to answer "are we stopping?" reads it — the readiness endpoint ([`routes/health/`](../routes/health/)) returns `503` while it is `true`, which tells the load balancer to stop routing here. Only `lifecycle/index.ts` calls `markShutdown()`.
 
 The flag is process-wide, so a second `registerProcessHandler` call in the same process sees it as already set. Exercise each scenario in its own process until the module keeps its own local flag.
 
 #### Where to call it
 
-Call it once. Registering twice installs every handler twice. Don't call it from `app.js` or from tests: importing the app must not attach signal handlers to the test runner's process.
+Call it once. Registering twice installs every handler twice. Don't call it from `app.ts` or from tests: importing the app must not attach signal handlers to the test runner's process.
 
-> On Windows, `pnpm dev` puts a `cmd` layer in front of Node that intercepts Ctrl+C ("Terminate batch job?"). To exercise the signal path, run `node --env-file=.env src/server.js` directly, or use WSL or Docker. `SIGTERM` is not delivered normally on Windows, so test that path in Docker or WSL.
+> On Windows, `pnpm dev` puts a `cmd` layer in front of Node that intercepts Ctrl+C ("Terminate batch job?"). To exercise the signal path, run `node --conditions=app-source --env-file=.env src/server.ts` directly, or use WSL or Docker. `SIGTERM` is not delivered normally on Windows, so test that path in Docker or WSL.
 
 ## Adding a client
 
 Export something configured and ready to use. Read settings from `config/`, never from `process.env` directly:
 
 ```js
-// lib/mailer.js
+// lib/mailer.ts
 import nodemailer from 'nodemailer'
-import { mailerConfig } from '#config/mailer.config.js'
+import { mailerConfig } from '#config/mailer.config'
 
 const transport = nodemailer.createTransport(mailerConfig)
 

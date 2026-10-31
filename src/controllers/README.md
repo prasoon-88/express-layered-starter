@@ -5,22 +5,22 @@
 ## What goes here
 - Reading input: `req.params`, `req.body`, `req.query`, `req.file`
 - Calling a service to do the actual work
-- Sending the response via [`apiResponse`](../utils/apiResponse.util.js) — `ok`, `created`, `pagination`, `redirect`
+- Sending the response via [`apiResponse`](../utils/apiResponse.util.ts) — `ok`, `created`, `pagination`, `redirect`
 - Forwarding errors to the error middleware with `next(err)`
 
 ## What does NOT go here
 - ❌ Business rules / validation logic (that's `services/`)
 - ❌ Database access (that's `repository/`)
 - ❌ Knowing *how* data is stored or computed
-- ❌ Formatting error responses or picking error status codes (that's `middlewares/error.middleware.js`)
+- ❌ Formatting error responses or picking error status codes (that's `middlewares/error.middleware.ts`)
 
 The controller should read like a short script: get input → call service → send output.
 
 ## Example
 ```js
-// controllers/api/post.controller.js
-import postService from '#services/post.service.js'
-import { apiResponse } from '#utils/apiResponse.util.js'
+// controllers/api/post.controller.ts
+import postService from '#services/post.service'
+import { apiResponse } from '#utils/apiResponse.util'
 
 export const getPost = async (req, res, next) => {
     try {

@@ -17,7 +17,7 @@
 
 ## The pipeline
 
-Order matters more here than anywhere else in the codebase. From [`app.js`](../app.js):
+Order matters more here than anywhere else in the codebase. From [`app.ts`](../app.ts):
 
 ```
 requestId      →  assign req.id, open the async context
@@ -46,10 +46,10 @@ Mounted with `app.use(requestIdMiddleware())` — note the call. Middleware with
 
 | File | Does |
 |------|------|
-| `requestId.middleware.js` | Reuses a valid inbound `X-Request-Id` or generates one; sets `req.id`, echoes the header, opens the async context |
-| `httpLogger.middleware.js` | One access log line per request with method, path, status, duration, IP; warns on slow or aborted requests; skips configured paths |
-| `notFound.middleware.js` | Converts an unmatched route into a `NotFoundError` |
-| `error.middleware.js` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
+| `requestId.middleware.ts` | Reuses a valid inbound `X-Request-Id` or generates one; sets `req.id`, echoes the header, opens the async context |
+| `httpLogger.middleware.ts` | One access log line per request with method, path, status, duration, IP; warns on slow or aborted requests; skips configured paths |
+| `notFound.middleware.ts` | Converts an unmatched route into a `NotFoundError` |
+| `error.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
 
 ## Writing one
 

@@ -26,7 +26,7 @@ const getUser = async (id) => {
 
 ## What goes here
 
-- `createContext.js` — a thin, generic `AsyncLocalStorage` wrapper
+- `createContext.ts` — a thin, generic `AsyncLocalStorage` wrapper
 - One file per distinct context, exposing **named getters**, never the raw store
 
 ## What does NOT go here
@@ -37,7 +37,7 @@ const getUser = async (id) => {
 
 ## How it works
 
-`requestId.middleware.js` opens the context once, at the very start of the request:
+`requestId.middleware.ts` opens the context once, at the very start of the request:
 
 ```js
 requestContext.run({ requestId: id }, next)
@@ -46,12 +46,12 @@ requestContext.run({ requestId: id }, next)
 Everything `next()` triggers — synchronous or `await`ed, however deep — can read it:
 
 ```js
-import requestContext from '#contexts/requestContext.js'
+import requestContext from '#contexts/requestContext'
 
 requestContext.getRequestId()   // '3f2b…'
 ```
 
-The logger does exactly this in its `mixin`, which is why every line is tagged with no effort from the caller. [`apiResponse`](../utils/apiResponse.util.js) does the same to include `requestId` in every response body.
+The logger does exactly this in its `mixin`, which is why every line is tagged with no effort from the caller. [`apiResponse`](../utils/apiResponse.util.ts) does the same to include `requestId` in every response body.
 
 ## Adding to the context
 

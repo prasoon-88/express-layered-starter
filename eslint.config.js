@@ -1,6 +1,8 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier';
+import tseslint from 'typescript-eslint';
+import { defineConfig } from 'eslint/config';
 
 // Layered architecture enforcement (see src/README.md).
 // For each layer, list the layers it MAY import. Everything else is denied.
@@ -40,32 +42,47 @@ const aliasPatterns = (layer) => {
 };
 
 const layerConfigs = LAYERS.map((layer) => ({
-  files: [`src/${layer}/**/*.js`],
+  files: [`src/${layer}/**/*.ts`],
   rules: {
     'no-restricted-imports': ['error', { patterns: [noParentRelative, aliasPatterns(layer)] }],
   },
 }));
 
-export default [
+export default defineConfig([
   { ignores: ['node_modules/**', 'public/**', 'coverage/**', 'dist/**'] },
 
   js.configs.recommended,
 
+  // Type-aware rules: they read tsconfig.json, so they catch bugs tsc allows
+  // (un-awaited promises, `any` leaking through, async functions passed where void is expected).
+  tseslint.configs.recommendedTypeChecked,
+
   {
-    files: ['**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: { ...globals.node },
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       'no-console': 'error',
+      // `_name` marks a parameter that is unused on purpose (e.g. a stub's signature).
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
+  },
+
+  // Plain JS files (this config) are not in tsconfig.json, so type-aware rules cannot run on them.
+  {
+    files: ['**/*.js'],
+    extends: [tseslint.configs.disableTypeChecked],
   },
 
   // Entry files and anything under src not in a layer: just forbid ../ traversal.
   {
-    files: ['src/**/*.js'],
+    files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [noParentRelative] }],
     },
@@ -76,4 +93,4 @@ export default [
 
   // Must be last: turns off stylistic rules that Prettier owns.
   prettier,
-];
+]);

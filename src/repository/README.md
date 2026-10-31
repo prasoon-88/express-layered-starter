@@ -19,8 +19,8 @@ That isolation is why `main` ships without a database at all: this folder and [`
 
 ## Example
 ```js
-// repository/post.repository.js
-import Post from '#models/post.model.js'
+// repository/post.repository.ts
+import Post from '#models/post.model'
 
 const create   = (data) => Post.create(data)
 const findById = (id)   => Post.findById(id)
@@ -31,7 +31,7 @@ export default { create, findById, findAll, remove }
 ```
 
 ## Pagination
-Repositories return raw rows and a count; [`Paginator`](../utils/paginator.util.js) handles the arithmetic and the response meta:
+Repositories return raw rows and a count; [`Paginator`](../utils/paginator.util.ts) handles the arithmetic and the response meta:
 
 ```js
 const findPage = async ({ pageSize, offset }) => ({
@@ -42,7 +42,7 @@ const findPage = async ({ pageSize, offset }) => ({
 
 ```js
 // in the service
-import { Paginator } from '#utils/paginator.util.js'
+import { Paginator } from '#utils/paginator.util'
 
 const listPosts = (query) => Paginator.paginate(query, postRepository.findPage)
 ```

@@ -19,22 +19,22 @@ A route should be **one line**: "this URL → that controller."
 Routers nest, and each level adds one prefix:
 
 ```
-routes/index.js            mounts  /      → web,  /api → api
-├── web/index.js           server-rendered pages (EJS)
-└── api/index.js           mounts express.json(), then /v1
-    └── v1/index.js        mounts /user, /post, …
-        └── user.routes.js the actual endpoints
+routes/index.ts            mounts  /      → web,  /api → api
+├── web/index.ts           server-rendered pages (EJS)
+└── api/index.ts           mounts express.json(), then /v1
+    └── v1/index.ts        mounts /user, /post, …
+        └── user.routes.ts the actual endpoints
 ```
 
-So `userRouter.post('/register', …)` is served at **`/api/v1/user/register`**. No file repeats a prefix its parent already added — that's what keeps versioning to a one-line change in `api/index.js`.
+So `userRouter.post('/register', …)` is served at **`/api/v1/user/register`**. No file repeats a prefix its parent already added — that's what keeps versioning to a one-line change in `api/index.ts`.
 
 JSON body parsing is mounted on the API router only, since the web routes render forms rather than consume JSON.
 
 ## Example
 ```js
-// routes/api/v1/post.routes.js
+// routes/api/v1/post.routes.ts
 import { Router } from 'express'
-import postController from '#controllers/api/post.controller.js'
+import postController from '#controllers/api/post.controller'
 
 const postRouter = Router()
 
@@ -45,7 +45,7 @@ postRouter.post('/', postController.createPost)     // POST /api/v1/post
 export default postRouter
 ```
 
-Then one line in `v1/index.js`:
+Then one line in `v1/index.ts`:
 
 ```js
 API_V1_ROUTER.use('/post', postRouter)

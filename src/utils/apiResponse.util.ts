@@ -1,0 +1,94 @@
+import type { Response } from 'express';
+import requestContext from '#contexts/requestContext';
+import HTTP_STATUS from '#constants/httpStatus.constant';
+import { Paginator, type PaginationInput } from '#utils/paginator.util';
+import { getLogger } from '#lib/logger/index';
+
+const logger = getLogger('apiResponse');
+
+const MESSAGE = {
+  SUCCESS: 'Success',
+  CREATED: 'Created',
+  ACCEPTED: 'Accepted',
+};
+
+const ERROR_MESSAGES = {
+  REDIRECT_REQUIRE_URL: 'redirect requires a url',
+};
+
+interface SendOptions {
+  message?: string;
+  data?: unknown;
+  meta?: Record<string, unknown>;
+  headers?: Record<string, string>;
+}
+
+type ResponseOptions = Omit<SendOptions, 'data'>;
+
+const alreadySent = (res: Response) => {
+  if (!res.headersSent) return false;
+  logger.warn({ path: res.req.originalUrl }, 'apiResponse called after headers sent');
+  return true;
+};
+
+const send = (
+  res: Response,
+  status: number,
+  { message = MESSAGE.SUCCESS, data = null, meta, headers }: SendOptions = {},
+) => {
+  if (alreadySent(res)) return;
+  if (headers) res.set(headers);
+  return res.status(status).json({
+    success: true,
+    message,
+    data,
+    ...(meta && { meta }),
+    requestId: requestContext.getRequestId(),
+  });
+};
+
+const ok = (res: Response, data?: unknown, options?: ResponseOptions) =>
+  send(res, HTTP_STATUS.OK, { ...options, data });
+
+const created = (res: Response, data?: unknown, options?: ResponseOptions) =>
+  send(res, HTTP_STATUS.CREATED, { message: MESSAGE.CREATED, ...options, data });
+
+const accepted = (res: Response, data?: unknown, options?: ResponseOptions) =>
+  send(res, HTTP_STATUS.ACCEPTED, { message: MESSAGE.ACCEPTED, ...options, data });
+
+const noContent = (res: Response, { headers }: Pick<SendOptions, 'headers'> = {}) => {
+  if (alreadySent(res)) return;
+  if (headers) res.set(headers);
+  return res.status(HTTP_STATUS.NO_CONTENT).end();
+};
+
+const redirect = (res: Response, url: string, status: number = HTTP_STATUS.FOUND) => {
+  if (alreadySent(res)) return;
+  if (!url) throw new Error(ERROR_MESSAGES.REDIRECT_REQUIRE_URL);
+  return res.redirect(status, url);
+};
+
+const pagination = (
+  res: Response,
+  items: readonly unknown[],
+  { total, page, pageSize }: PaginationInput,
+  options?: ResponseOptions,
+) =>
+  send(res, HTTP_STATUS.OK, {
+    ...options,
+    data: items,
+    meta: Paginator.buildPagination({
+      total,
+      page,
+      pageSize,
+    }),
+  });
+
+export const apiResponse = {
+  ok,
+  created,
+  accepted,
+  noContent,
+  redirect,
+  pagination,
+};

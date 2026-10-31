@@ -12,9 +12,9 @@
 - ❌ Values that differ per environment or that you might tune (that's `config/`)
 - ❌ Logic or functions
 
-## The one exception: `env.constant.js`
+## The one exception: `env.constant.ts`
 
-[`env.constant.js`](env.constant.js) is the single file allowed to read `process.env`. It reads each variable once, applies a default, and coerces the type — so `PORT` is a number and `LOG_IGNORE_PATHS` is an array by the time anyone else sees it.
+[`env.constant.ts`](env.constant.ts) is the single file allowed to read `process.env`. It reads each variable once, applies a default, and coerces the type — so `PORT` is a number and `LOG_IGNORE_PATHS` is an array by the time anyone else sees it.
 
 It lives here rather than in `config/` because the *list of variables the app understands* is itself a fixed fact. Everything downstream, `config/` included, imports `ENV_CONSTANTS` and never touches `process.env` again.
 
@@ -34,7 +34,7 @@ USER_ROLES      → fixed set      → constants
 
 ## Example
 ```js
-// constants/http.js
+// constants/http.ts
 export const HTTP_STATUS = {
     OK: 200,
     CREATED: 201,
@@ -44,7 +44,7 @@ export const HTTP_STATUS = {
     SERVER_ERROR: 500,
 }
 
-// constants/roles.js
+// constants/roles.ts
 export const USER_ROLES = { ADMIN: 'admin', USER: 'user' }
 ```
 

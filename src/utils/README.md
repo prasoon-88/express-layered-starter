@@ -17,11 +17,11 @@
 |---|---|---|
 | Wraps an external system? | ❌ No | ✅ Yes |
 | Has setup/connections? | ❌ Pure functions | ✅ Clients, SDKs |
-| Example | `slugify()`, `formatDate()` | `logger/`, `mailer.js` |
+| Example | `slugify()`, `formatDate()` | `logger/`, `mailer.ts` |
 
 ## What's here
 
-### `apiResponse.util.js`
+### `apiResponse.util.ts`
 One response shape for the whole app. Controllers call it instead of `res.json()`:
 
 ```js
@@ -33,7 +33,7 @@ apiResponse.pagination(res, items, { total, page, pageSize })
 
 Every body comes out as `{ success, message, data, requestId }` — the request ID read straight from the [async context](../contexts/), so no layer has to pass it along. Calling it after the response is already sent logs a warning instead of throwing.
 
-### `paginator.util.js`
+### `paginator.util.ts`
 Turns untrusted `?page=&pageSize=` into safe integers, rejects nonsense with an `UnprocessableEntityError`, clamps to sane maximums, and computes the `meta` block:
 
 ```js
@@ -42,11 +42,11 @@ const { items, paging } = await Paginator.paginate(req.query, postRepository.fin
 
 `parse()` gives you `{ page, pageSize, offset }` if you want to drive the query yourself.
 
-### `sleep.util.js`
+### `sleep.util.ts`
 `sleep(ms)` returns a promise that resolves after `ms` milliseconds. [`lib/lifecycle`](../lib/lifecycle/) uses it for the drain delay.
 
 ```js
-import { sleep } from '#utils/sleep.util.js'
+import { sleep } from '#utils/sleep.util'
 
 await sleep(5000)
 ```
@@ -55,11 +55,11 @@ It has **no imports**, which is what lets `lib/` use it without breaking the dep
 
 ## Example
 ```js
-// utils/slug.js
+// utils/slug.ts
 export const slugify = (text) =>
     text.toLowerCase().trim().replace(/\s+/g, '-')
 
-// utils/date.js
+// utils/date.ts
 export const formatDate = (d) =>
     new Date(d).toISOString().split('T')[0]
 ```

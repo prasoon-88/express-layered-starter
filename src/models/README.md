@@ -21,7 +21,7 @@ Models are the one place that is unavoidably database-specific, so `main` ships 
 
 ## Example
 ```js
-// models/post.model.js
+// models/post.model.ts
 import { Schema, model } from 'mongoose'
 
 const postSchema = new Schema({
