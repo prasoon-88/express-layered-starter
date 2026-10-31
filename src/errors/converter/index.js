@@ -1,17 +1,17 @@
-import httpConverter from './http.converter.js'
-import jwtConverter from './jwt.converter.js'
+import httpConverter from './http.converter.js';
+import jwtConverter from './jwt.converter.js';
 
-const converters = [httpConverter, jwtConverter]
+const converters = [httpConverter, jwtConverter];
 
-export const convertError = (err) =>{
-    for(const converter of converters){
-        try{
-            const converted = converter(err)
-            if(converted) return converted
-        }catch(error){
-            console.log('[ FAILED ]: Error converter')
-        }
+export const convertError = (err) => {
+  for (const converter of converters) {
+    try {
+      const converted = converter(err);
+      if (converted) return converted;
+    } catch {
+      // a converter threw on this error shape — skip it and try the next
     }
+  }
 
-    return null
-}
+  return null;
+};

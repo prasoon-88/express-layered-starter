@@ -1,8 +1,8 @@
-import { Router } from 'express'
-import signupController from '#controllers/web/signup.controller.js'
+import { Router } from 'express';
+import signupController from '#controllers/web/signup.controller.js';
 
-const signupRouter = Router()
+const signupRouter = Router();
 
-signupRouter.get('/', signupController.getSignup)
+signupRouter.get('/', signupController.getSignup);
 
-export default signupRouter
+export default signupRouter;

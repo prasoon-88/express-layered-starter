@@ -36,12 +36,13 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 
 ### Prerequisites
 
-Node.js **20.6+** — required for the built-in `--env-file` flag.
+- **Node.js ≥26** — enforced via `engines` + `.npmrc` (`engine-strict`). Use the pinned version with `nvm use` (reads [`.nvmrc`](.nvmrc)).
+- **pnpm** is the only supported package manager. Enable it with Corepack (ships with Node): `corepack enable pnpm`. A `preinstall` guard rejects `npm` and `yarn`.
 
 ### Install
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### Environment
@@ -75,7 +76,7 @@ Every variable has a fallback in [`src/constants/env.constant.js`](src/constants
 ### Run
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Loads `.env` and restarts on file changes. The server listens on `PORT` (default `8000`).
@@ -227,8 +228,11 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 
 | Command | What it does |
 |---------|--------------|
-| `npm run dev` | Start with `.env` loaded and auto-restart on changes |
-| `npm start` | Start without the watcher (expects env from the environment) |
+| `pnpm dev` | Start with `.env` loaded and auto-restart on changes |
+| `pnpm start` | Start without the watcher (expects env from the environment) |
+| `pnpm lint` | ESLint (recommended rules + layered-import enforcement) |
+| `pnpm format` | Rewrite files with Prettier |
+| `pnpm format:check` | Verify formatting without writing |
 
 ## Roadmap
 

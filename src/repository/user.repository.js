@@ -1,9 +1,7 @@
-const create = ()=>{
-
-}
+const create = () => {};
 
 const userRepository = {
-    create
-}
+  create,
+};
 
-export default userRepository
+export default userRepository;

@@ -1,8 +1,10 @@
-let shuttingDown = false
+let shuttingDown = false;
 
 const lifecycleState = Object.freeze({
-    isShuttingDown: () => shuttingDown,
-    markShutdown: () => { shuttingDown = true }
-})
+  isShuttingDown: () => shuttingDown,
+  markShutdown: () => {
+    shuttingDown = true;
+  },
+});
 
-export default lifecycleState
+export default lifecycleState;

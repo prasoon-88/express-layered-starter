@@ -128,7 +128,7 @@ The flag is process-wide, so a second `registerProcessHandler` call in the same 
 
 Call it once. Registering twice installs every handler twice. Don't call it from `app.js` or from tests: importing the app must not attach signal handlers to the test runner's process.
 
-> On Windows, `npm run dev` puts a `cmd` layer in front of Node that intercepts Ctrl+C ("Terminate batch job?"). To exercise the signal path, run `node --env-file=.env src/server.js` directly, or use WSL or Docker. `SIGTERM` is not delivered normally on Windows, so test that path in Docker or WSL.
+> On Windows, `pnpm dev` puts a `cmd` layer in front of Node that intercepts Ctrl+C ("Terminate batch job?"). To exercise the signal path, run `node --env-file=.env src/server.js` directly, or use WSL or Docker. `SIGTERM` is not delivered normally on Windows, so test that path in Docker or WSL.
 
 ## Adding a client
 
