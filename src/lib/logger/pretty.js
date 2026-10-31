@@ -9,7 +9,7 @@ const CUSTOMIZE_COLOR = {
     info: 'green',
     warn: 'yellow',
     error: 'red',
-    fetal: 'bgRed'
+    fatal: 'bgRed'
 }
 
 const getPaint = (statusCode, colors) => {
@@ -29,7 +29,7 @@ const messageFormat = (log, messageKey, levelLabel, { colors }) => {
             const paint = getPaint(log.status, colors)
             const timing = log.slow ? colors.yellow : colors.gray
             const flags = [
-                log.abort && colors.red("ABORTED"),
+                log.aborted && colors.red("ABORTED"),
                 log.errorCode && colors.red(log.errorCode)
             ].filter(Boolean).join(" ")
             return `${id} ${colors.bold(log.method)} ${log.path} ${paint(log.status)} ${timing(`${log.durationMs}ms`)}${flags ? " " + flags : ""}`

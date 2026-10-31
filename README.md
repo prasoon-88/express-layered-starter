@@ -15,6 +15,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Error class hierarchy + converters + central handler | [`errors/`](src/errors/) · [`error.middleware.js`](src/middlewares/error.middleware.js) |
 | Uniform success/error response envelope | [`apiResponse.util.js`](src/utils/apiResponse.util.js) |
 | Validated pagination (parse, clamp, build meta) | [`paginator.util.js`](src/utils/paginator.util.js) |
+| Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.js`](src/server.js) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
 
 ## Tech stack
@@ -56,6 +57,9 @@ LOG_LEVEL=info                          # trace | debug | info | warn | error | 
 LOG_PRETTY=true                         # human-readable output; JSON when false
 LOG_IGNORE_PATHS=/health,/favicon.ico   # paths excluded from access logs
 LOG_SLOW_MS=1000                        # requests at or above this are logged as warnings
+
+# Shutdown
+SHUTDOWN_TIMEOUT_MS=8000                # max ms to let in-flight requests finish before forcing exit
 ```
 
 Every variable has a fallback in [`src/constants/env.constant.js`](src/constants/env.constant.js), so the app boots with an empty `.env`.
@@ -91,7 +95,7 @@ express-layered-starter/
     ├── contexts/        # AsyncLocalStorage — request-scoped state
     ├── controllers/     # HTTP layer (req/res), calls services
     ├── errors/          # error classes + framework error converters
-    ├── lib/             # wrappers around external systems (logger)
+    ├── lib/             # wrappers around external systems (logger, process lifecycle)
     ├── middlewares/     # cross-cutting request concerns
     ├── models/          # data shapes / DB schemas
     ├── repository/      # database access only
@@ -205,5 +209,5 @@ Every response carries the same envelope:
 - [ ] Input validation at the controller boundary
 - [ ] Auth: register / login with JWT
 - [ ] Health check endpoint
-- [ ] Graceful shutdown
+- [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
 - [ ] Tests
