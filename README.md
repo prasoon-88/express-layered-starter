@@ -17,6 +17,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Validated pagination (parse, clamp, build meta) | [`paginator.util.js`](src/utils/paginator.util.js) |
 | Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.js`](src/server.js) |
 | Health checks (liveness + readiness) | [`routes/health/`](src/routes/health/) · [`controllers/health/`](src/controllers/health/) |
+| Security headers, static serving, proxy-aware client IPs | [`app.js`](src/app.js) (`helmet`, `express.static`, `trust proxy`) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
 
 ## Tech stack
@@ -27,7 +28,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | [pino](https://getpino.io/) | Structured JSON logging (`pino-pretty` in dev) |
 | [EJS](https://ejs.co/) | Server-side rendered views |
 | [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | JWT — error converter wired, auth not yet built |
-| [helmet](https://helmetjs.github.io/) | Security headers — installed, not yet mounted |
+| [helmet](https://helmetjs.github.io/) | Security headers, mounted on every response |
 | ES Modules | `"type": "module"` — `import` / `export` |
 | `node --env-file` | Native `.env` loading, no `dotenv` |
 
@@ -52,6 +53,7 @@ Create a `.env` in the project root — it is gitignored, never commit it:
 SERVICE_NAME=express-layered-starter
 PORT=8000
 NODE_ENV=development
+TRUST_PROXY=                            # hops to trust behind a proxy: a number (1, 2), true/false, or "loopback"/a subnet. Empty = false (local)
 
 # Logging
 LOG_LEVEL=info                          # trace | debug | info | warn | error | fatal
@@ -67,6 +69,8 @@ SHUTDOWN_DELAY_MS=5000                  # ms to keep serving after SIGTERM/SIGIN
 Every variable has a fallback in [`src/constants/env.constant.js`](src/constants/env.constant.js), so the app boots with an empty `.env`.
 
 `SHUTDOWN_DELAY_MS` must be smaller than `SHUTDOWN_TIMEOUT_MS`, or the app refuses to start. Set it to `0` locally so Ctrl+C exits at once; see [`src/lib/README.md`](src/lib/README.md#lifecycle) for tuning per platform.
+
+`TRUST_PROXY` sets Express's [`trust proxy`](https://expressjs.com/en/guide/behind-proxies.html), which decides how `req.ip` is read behind a reverse proxy. Its meaning depends on the type: a **number** trusts that many hops (`1` for a single nginx/load balancer), `true`/`false` trust all/none, and a string like `loopback` or a subnet trusts specific addresses. Leave it empty locally (no proxy); set it to the real hop count in production, or a client can forge their IP.
 
 ### Run
 
@@ -234,8 +238,10 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] Error hierarchy, converters, central handler
 - [x] Response envelope + pagination
 - [x] JSON body parsing on `/api`
-- [ ] Form body parsing (`express.urlencoded`) and static file serving for the web routes
-- [ ] Mount `helmet` and CORS
+- [x] Form body parsing (`express.urlencoded`) and static file serving
+- [x] Security headers (`helmet`), static assets, and `trust proxy`
+- [ ] CORS (when a cross-origin client needs it)
+- [ ] Env validation (zod) — reject malformed values at boot
 - [ ] Input validation at the controller boundary
 - [ ] Auth: register / login with JWT
 - [x] Health checks: liveness + readiness endpoints
