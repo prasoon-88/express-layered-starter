@@ -17,7 +17,30 @@
 |---|---|---|
 | Wraps an external system? | ❌ No | ✅ Yes |
 | Has setup/connections? | ❌ Pure functions | ✅ Clients, SDKs |
-| Example | `slugify()`, `formatDate()` | `db.js`, `mailer.js` |
+| Example | `slugify()`, `formatDate()` | `logger/`, `mailer.js` |
+
+## What's here
+
+### `apiResponse.util.js`
+One response shape for the whole app. Controllers call it instead of `res.json()`:
+
+```js
+apiResponse.ok(res, user)
+apiResponse.created(res, user, { message: 'User registered' })
+apiResponse.noContent(res)
+apiResponse.pagination(res, items, { total, page, pageSize })
+```
+
+Every body comes out as `{ success, message, data, requestId }` — the request ID read straight from the [async context](../contexts/), so no layer has to pass it along. Calling it after the response is already sent logs a warning instead of throwing.
+
+### `paginator.util.js`
+Turns untrusted `?page=&pageSize=` into safe integers, rejects nonsense with an `UnprocessableEntityError`, clamps to sane maximums, and computes the `meta` block:
+
+```js
+const { items, paging } = await Paginator.paginate(req.query, postRepository.findPage)
+```
+
+`parse()` gives you `{ page, pageSize, offset }` if you want to drive the query yourself.
 
 ## Example
 ```js

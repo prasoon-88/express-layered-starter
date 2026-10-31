@@ -1,67 +1,113 @@
-# Blog Application
+# express-layered-starter
 
-A Node.js + Express blog backend, built with a clean **layered architecture** (routes → controllers → services → repository). This project is a learning exercise in structuring a real backend the way production apps are organized.
+A Node.js + Express starter built on a clean **layered architecture** (routes → controllers → services → repository). It ships the parts every backend needs and nobody enjoys rebuilding — request-scoped logging, an error hierarchy with framework converters, uniform API responses, and pagination — so a new project starts at the interesting part.
+
+`main` is **database-agnostic**. Each database integration lives on its own branch.
+
+## What's already built
+
+| Capability | Where |
+|------------|-------|
+| Layered architecture with enforced dependency direction | [`src/README.md`](src/README.md) |
+| Request IDs, propagated without passing `req` around | [`contexts/`](src/contexts/) · [`requestId.middleware.js`](src/middlewares/requestId.middleware.js) |
+| Structured JSON logging with secret redaction | [`lib/logger/`](src/lib/logger/) · [`logger.config.js`](src/config/logger.config.js) |
+| HTTP access logs with duration + slow-request warnings | [`httpLogger.middleware.js`](src/middlewares/httpLogger.middleware.js) |
+| Error class hierarchy + converters + central handler | [`errors/`](src/errors/) · [`error.middleware.js`](src/middlewares/error.middleware.js) |
+| Uniform success/error response envelope | [`apiResponse.util.js`](src/utils/apiResponse.util.js) |
+| Validated pagination (parse, clamp, build meta) | [`paginator.util.js`](src/utils/paginator.util.js) |
+| Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
 
 ## Tech stack
 
 | Tool | Purpose |
 |------|---------|
 | [Express 5](https://expressjs.com/) | Web framework / HTTP server |
-| [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | JWT authentication |
-| EJS *(if used)* | Server-side rendered views |
-| ES Modules | `"type": "module"` — uses `import`/`export` |
+| [pino](https://getpino.io/) | Structured JSON logging (`pino-pretty` in dev) |
+| [EJS](https://ejs.co/) | Server-side rendered views |
+| [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | JWT — error converter wired, auth not yet built |
+| [helmet](https://helmetjs.github.io/) | Security headers — installed, not yet mounted |
+| ES Modules | `"type": "module"` — `import` / `export` |
+| `node --env-file` | Native `.env` loading, no `dotenv` |
 
 ## Getting started
 
 ### Prerequisites
-- Node.js **20.6+** (required for the built-in `--env-file` flag)
+
+Node.js **20.6+** — required for the built-in `--env-file` flag.
 
 ### Install
+
 ```bash
 npm install
 ```
 
 ### Environment
-Create a `.env` file in the project root (it is gitignored — never commit it):
+
+Create a `.env` in the project root — it is gitignored, never commit it:
+
 ```bash
-PORT=3000
-JWT_SECRET=replace-with-a-long-random-string
-# DB_URL=...        # add when a database is wired up
+# General
+SERVICE_NAME=express-layered-starter
+PORT=8000
+NODE_ENV=development
+
+# Logging
+LOG_LEVEL=info                          # trace | debug | info | warn | error | fatal
+LOG_PRETTY=true                         # human-readable output; JSON when false
+LOG_IGNORE_PATHS=/health,/favicon.ico   # paths excluded from access logs
+LOG_SLOW_MS=1000                        # requests at or above this are logged as warnings
 ```
 
-### Run (development)
+Every variable has a fallback in [`src/constants/env.constant.js`](src/constants/env.constant.js), so the app boots with an empty `.env`.
+
+### Run
+
 ```bash
 npm run dev
 ```
-This runs `node --env-file=.env --watch src/index.js` — it loads `.env` and auto-restarts on file changes.
 
-The server starts on the port from `.env` (`http://localhost:3000` by default).
+Loads `.env` and restarts on file changes. The server listens on `PORT` (default `8000`).
+
+## Branches
+
+| Branch | Contains |
+|--------|----------|
+| `main` | The database-agnostic base. `repository/` and `models/` are empty scaffolding. |
+| `mongodb` | Mongoose: user schema and the Mongoose error converter. |
+
+Start from `main` for a new project, then merge in the branch for your database — or write your own repository layer against whatever you like. Nothing above `repository/` knows how data is stored.
 
 ## Project structure
 
 ```
-blog-application/
-├── .env                 # secrets & env config (gitignored)
-├── package.json
+express-layered-starter/
+├── .env                 # env config (gitignored)
+├── package.json         # deps + subpath import aliases
 └── src/
-    ├── index.js         # app entry point — wires everything together
-    ├── config/          # tunable settings (reads from .env)
+    ├── index.js         # entry point — wires middleware and routes
+    ├── config/          # tunable settings, derived from env
     ├── constants/       # fixed values that never change
-    ├── routes/          # URL → controller mapping
+    ├── contexts/        # AsyncLocalStorage — request-scoped state
     ├── controllers/     # HTTP layer (req/res), calls services
-    ├── services/        # business logic, rules, orchestration
-    ├── repository/      # raw database access only
+    ├── errors/          # error classes + framework error converters
+    ├── lib/             # wrappers around external systems (logger)
+    ├── middlewares/     # cross-cutting request concerns
     ├── models/          # data shapes / DB schemas
-    ├── utils/           # small pure helper functions
-    └── views/           # server-side rendered templates
+    ├── repository/      # database access only
+    ├── routes/          # URL → controller mapping
+    ├── services/        # business logic, rules, orchestration
+    ├── utils/           # small pure helpers
+    └── views/           # EJS templates
 ```
 
-> Each folder has its own `README.md` explaining exactly what belongs in it. See [`src/README.md`](src/README.md) for how the layers connect.
+> Every folder has its own `README.md` explaining exactly what belongs in it. See [`src/README.md`](src/README.md) for how the layers connect.
 
 ## Architecture in one picture
 
 ```
 HTTP request
+   ↓
+requestId  →  httpLogger                 (cross-cutting middleware)
    ↓
 routes/        which URL → which controller
    ↓
@@ -73,34 +119,90 @@ repository/    run the database query                    (the hands)
    ↓
 models/ → Database
 
-   (config / constants / utils are available to every layer)
+   ↓ anything thrown ↓
+notFound  →  errorHandler                (normalize, log, respond)
+
+   (config / constants / utils / errors are available to every layer)
 ```
 
 **The golden rule:** each layer only talks to the one directly below it.
+
 - Controllers never query the database.
 - Services never touch `req` / `res`.
 - Repositories never contain business rules.
 
+## Request IDs
+
+Every request gets an ID — reused from an inbound `X-Request-Id` header when it is well-formed, generated otherwise. It is set on `req.id`, echoed back as a response header, and stored in `AsyncLocalStorage`, so **every log line from any file carries it without threading `req` through your call stack**:
+
+```js
+import { getLogger } from '#lib/logger/index.js'
+const logger = getLogger('user.service')
+
+logger.info({ userId }, 'user created')
+// → {"level":"info","requestId":"3f2b…","module":"user.service","userId":"…"}
+```
+
+## Error handling
+
+Throw a typed error from anywhere; the middleware does the rest.
+
+```js
+import { NotFoundError } from '#errors'
+
+const getUser = async (id) => {
+    const user = await userRepository.findById(id)
+    if (!user) throw new NotFoundError('User not found')
+    return user
+}
+```
+
+The handler normalizes anything thrown — including framework errors from JWT or your database driver, via [`errors/converter/`](src/errors/converter/) — then logs it and responds in the right format: JSON for `/api` routes, a rendered `error` view otherwise. Stack traces are included outside production only.
+
+## Responses
+
+```js
+import apiResponse from '#utils/apiResponse.util.js'
+
+apiResponse.ok(res, user)
+apiResponse.created(res, user, { message: 'User registered' })
+apiResponse.pagination(res, items, { total, page, pageSize })
+```
+
+Every response carries the same envelope:
+
+```json
+{ "success": true, "message": "Success", "data": {}, "requestId": "3f2b…" }
+```
+
 ## Conventions
 
 - **ES Modules** — use `import` / `export`, always include the `.js` extension in local imports.
+- **Subpath imports** — import across folders with `#services/user.service.js`, never `../../services/...`.
 - **Config vs constants** — tunable/env-dependent values go in `config/`; fixed facts go in `constants/`. `config/` may import `constants/`, never the reverse.
-- **Naming** — settings and constants use `UPPERCASE_SNAKE_CASE`.
-- **Secrets** — only ever in `.env`; config files *read* them via `process.env`, never hardcode.
-- **Error path first** — for every operation that can fail, handle the failure (missing input, not found, DB error) — don't just code the happy path.
+- **Naming** — files are `name.layer.js` (`user.service.js`); constants use `UPPERCASE_SNAKE_CASE`.
+- **Secrets** — only ever in `.env`; config files *read* them via `process.env`, never hardcode. Add new sensitive field names to `redactPaths` in [`config/logger.config.js`](src/config/logger.config.js).
+- **Error path first** — for every operation that can fail, handle the failure. Throw a typed error rather than returning `null` and checking upstream.
 
 ## Scripts
 
 | Command | What it does |
 |---------|--------------|
-| `npm run dev` | Start the server with `.env` loaded and auto-restart on changes |
+| `npm run dev` | Start with `.env` loaded and auto-restart on changes |
+| `npm start` | Start without the watcher (expects env from the environment) |
 
-## Roadmap / TODO
+## Roadmap
 
-- [ ] Wire up `src/index.js` (Express app, middleware, mount routers)
-- [ ] Add a database (models + repository)
-- [ ] Posts feature: create, list, read, update, delete
+- [x] Layered skeleton, wired entry point
+- [x] Request IDs + async context
+- [x] Structured logging + HTTP access logs
+- [x] Error hierarchy, converters, central handler
+- [x] Response envelope + pagination
+- [x] JSON body parsing on `/api`
+- [ ] Form body parsing (`express.urlencoded`) and static file serving for the web routes
+- [ ] Mount `helmet` and CORS
+- [ ] Input validation at the controller boundary
 - [ ] Auth: register / login with JWT
-- [ ] Error-handling middleware
-- [ ] Input validation
+- [ ] Health check endpoint
+- [ ] Graceful shutdown
 - [ ] Tests

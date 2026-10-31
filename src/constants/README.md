@@ -10,8 +10,13 @@
 
 ## What does NOT go here
 - ❌ Values that differ per environment or that you might tune (that's `config/`)
-- ❌ Anything read from `.env`
 - ❌ Logic or functions
+
+## The one exception: `env.constant.js`
+
+[`env.constant.js`](env.constant.js) is the single file allowed to read `process.env`. It reads each variable once, applies a default, and coerces the type — so `PORT` is a number and `LOG_IGNORE_PATHS` is an array by the time anyone else sees it.
+
+It lives here rather than in `config/` because the *list of variables the app understands* is itself a fixed fact. Everything downstream, `config/` included, imports `ENV_CONSTANTS` and never touches `process.env` again.
 
 ## Config vs Constants — the test
 > "Would this value be different on my laptop vs production, or might I tune it?"

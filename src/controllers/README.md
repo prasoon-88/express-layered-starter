@@ -5,27 +5,44 @@
 ## What goes here
 - Reading input: `req.params`, `req.body`, `req.query`, `req.file`
 - Calling a service to do the actual work
-- Sending the response: `res.json()`, `res.render()`, `res.redirect()`, status codes
-- Catching errors and turning them into HTTP responses
+- Sending the response via [`apiResponse`](../utils/apiResponse.util.js) — `ok`, `created`, `pagination`, `redirect`
+- Forwarding errors to the error middleware with `next(err)`
 
 ## What does NOT go here
 - ❌ Business rules / validation logic (that's `services/`)
 - ❌ Database access (that's `repository/`)
 - ❌ Knowing *how* data is stored or computed
+- ❌ Formatting error responses or picking error status codes (that's `middlewares/error.middleware.js`)
 
 The controller should read like a short script: get input → call service → send output.
 
 ## Example
 ```js
-// controllers/post.controller.js
-import * as postService from '../services/post.service.js'
+// controllers/api/post.controller.js
+import postService from '#services/post.service.js'
+import apiResponse from '#utils/apiResponse.util.js'
 
-export const getPost = async (req, res) => {
+export const getPost = async (req, res, next) => {
     try {
         const post = await postService.getPostById(req.params.id)  // service does the work
-        res.json(post)
+        apiResponse.ok(res, post)
     } catch (err) {
-        res.status(404).json({ message: err.message })
+        next(err)                                                  // handler decides the status
+    }
+}
+```
+
+Note what's missing: no status codes chosen by hand, no error shaping. The service throws a typed error, the middleware turns it into the right response, and the controller stays three lines long.
+
+## Paginated lists
+```js
+export const listPosts = async (req, res, next) => {
+    try {
+        const { page, pageSize } = req.query
+        const { items, paging } = await postService.listPosts({ page, pageSize })
+        apiResponse.pagination(res, items, paging)
+    } catch (err) {
+        next(err)
     }
 }
 ```

@@ -14,19 +14,41 @@
 
 A route should be **one line**: "this URL → that controller."
 
+## How routing is organized
+
+Routers nest, and each level adds one prefix:
+
+```
+routes/index.js            mounts  /      → web,  /api → api
+├── web/index.js           server-rendered pages (EJS)
+└── api/index.js           mounts express.json(), then /v1
+    └── v1/index.js        mounts /user, /post, …
+        └── user.routes.js the actual endpoints
+```
+
+So `userRouter.post('/register', …)` is served at **`/api/v1/user/register`**. No file repeats a prefix its parent already added — that's what keeps versioning to a one-line change in `api/index.js`.
+
+JSON body parsing is mounted on the API router only, since the web routes render forms rather than consume JSON.
+
 ## Example
 ```js
-// routes/post.routes.js
-import express from 'express'
-import * as postController from '../controllers/post.controller.js'
+// routes/api/v1/post.routes.js
+import { Router } from 'express'
+import postController from '#controllers/api/post.controller.js'
 
-const postRouter = express.Router()
+const postRouter = Router()
 
-postRouter.get('/posts', postController.listPosts)
-postRouter.get('/posts/:id', postController.getPost)
-postRouter.post('/posts', postController.createPost)
+postRouter.get('/', postController.listPosts)       // GET  /api/v1/post
+postRouter.get('/:id', postController.getPost)      // GET  /api/v1/post/:id
+postRouter.post('/', postController.createPost)     // POST /api/v1/post
 
 export default postRouter
+```
+
+Then one line in `v1/index.js`:
+
+```js
+API_V1_ROUTER.use('/post', postRouter)
 ```
 
 ## Rule of thumb

@@ -15,18 +15,35 @@
 ## Example
 ```js
 // services/post.service.js
-import * as postRepository from '../repository/post.repository.js'
+import postRepository from '#repository/post.repository.js'
+import { BadRequestError, ConflictError } from '#errors'
 
-export const createPost = async ({ title, body, authorId }) => {
-    if (!title) throw new Error('Title is required')          // rule
+const createPost = async ({ title, body, authorId }) => {
+    if (!title) throw new BadRequestError('Title is required')    // rule
 
-    const slug = title.toLowerCase().replace(/\s+/g, '-')     // transformation
-    const post = await postRepository.create({                // hand off to repo
-        title, body, authorId, slug,
-    })
-    return post
+    const slug = title.toLowerCase().replace(/\s+/g, '-')         // transformation
+
+    const existing = await postRepository.findBySlug(slug)
+    if (existing) throw new ConflictError('A post with this title already exists')
+
+    return postRepository.create({ title, body, authorId, slug }) // hand off to repo
 }
+
+export default { createPost }
 ```
+
+**Throw typed errors, don't return `null`.** A `NotFoundError` from here becomes a 404 with the right code and body without the service knowing what HTTP is — and every caller, including a CLI or a cron job, gets a failure it can catch by type.
+
+## Logging from a service
+```js
+import { getLogger } from '#lib/logger/index.js'
+
+const logger = getLogger('post.service')
+
+logger.info({ postId: post.id }, 'post published')
+```
+
+The current request ID is attached automatically — see [`contexts/`](../contexts/). You never need `req` here.
 
 ## The test
 > Is this a rule, a decision, or a sequence of steps? → it belongs here.

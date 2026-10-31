@@ -15,6 +15,10 @@
 
 A model describes **what the data looks like**, not what you do with it.
 
+## This folder is empty on `main`
+
+Models are the one place that is unavoidably database-specific, so `main` ships without them. Each database integration lives on its own branch — `mongodb` has the Mongoose schemas — and merges in alongside a matching [`repository/`](../repository/). Everything above that line is written once and never changes.
+
 ## Example
 ```js
 // models/post.model.js

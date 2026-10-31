@@ -15,15 +15,36 @@
 ## Why this layer exists
 It isolates the database. If you switch MongoDB → PostgreSQL, **only this folder changes** — services and controllers stay untouched because they never knew how data was stored.
 
+That isolation is why `main` ships without a database at all: this folder and [`models/`](../models/) are the only ones a database integration touches, so each one lives on its own branch (`mongodb`, …) and merges in cleanly.
+
 ## Example
 ```js
 // repository/post.repository.js
-import Post from '../models/post.model.js'
+import Post from '#models/post.model.js'
 
-export const create   = (data) => Post.create(data)
-export const findById = (id)   => Post.findById(id)
-export const findAll  = ()     => Post.find()
-export const remove   = (id)   => Post.findByIdAndDelete(id)
+const create   = (data) => Post.create(data)
+const findById = (id)   => Post.findById(id)
+const findAll  = ()     => Post.find()
+const remove   = (id)   => Post.findByIdAndDelete(id)
+
+export default { create, findById, findAll, remove }
+```
+
+## Pagination
+Repositories return raw rows and a count; [`Paginator`](../utils/paginator.util.js) handles the arithmetic and the response meta:
+
+```js
+const findPage = async ({ pageSize, offset }) => ({
+    items: await Post.find().skip(offset).limit(pageSize),
+    total: await Post.countDocuments(),
+})
+```
+
+```js
+// in the service
+import { Paginator } from '#utils/paginator.util.js'
+
+const listPosts = (query) => Paginator.paginate(query, postRepository.findPage)
 ```
 
 ## The test
