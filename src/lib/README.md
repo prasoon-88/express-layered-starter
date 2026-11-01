@@ -130,6 +130,49 @@ Call it once. Registering twice installs every handler twice. Don't call it from
 
 > On Windows, `pnpm dev` puts a `cmd` layer in front of Node that intercepts Ctrl+C ("Terminate batch job?"). To exercise the signal path, run `node --conditions=app-source --env-file=.env src/server.ts` directly, or use WSL or Docker. `SIGTERM` is not delivered normally on Windows, so test that path in Docker or WSL.
 
+### `http/`
+
+`route()` in [`route.lib.ts`](http/route.lib.ts) wraps a controller with [Zod](https://zod.dev/) validation. Give it schemas for any of `body`, `query`, `params` and `response`, then a handler, then options:
+
+```js
+import { z } from 'zod'
+import { route } from '#lib/http/route.lib'
+
+export const listUsers = route(
+    {
+        query: z.object({ page: z.coerce.number().int().min(1).default(1) }),
+        response: z.array(z.object({ id: z.string(), email: z.email() })),
+    },
+    ({ query }) => userService.listUsers(query.page),   // query.page is a number here
+    { status: 200 },                                    // optional, defaults to 200
+)
+```
+
+Use it in `controllers/`. `routes/` may not import `lib/`, so a route file only references the wrapped controller.
+
+It runs in two phases, and the phase an error comes from decides its status:
+
+| Phase | What fails | Response |
+|-------|------------|----------|
+| 1. Input | `body`, `query` or `params` doesn't match its schema | `400 BAD_REQUEST`, every failing field in `details` |
+| 2. Handler | it throws a typed error (`NotFoundError`, …) | that error's status and code |
+| 2. Handler | it throws anything else, rejects, or throws a `ZodError` | `500 INTERNAL_ERROR`, generic message |
+| 2. Response | the return value doesn't match `response` | `500 INTERNAL_ERROR`; the mismatch is logged, never sent |
+
+`route()` never builds an error response itself. `lib/` may not import `errors/`, so it only calls `next(err)`. The [Zod converter](../errors/converter/zod.converter.ts) turns the input `ZodError` into a `BadRequestError`, and the [error handler](../middlewares/error.middleware.ts) sends it.
+
+#### Behaviors worth knowing
+
+- **All three inputs are checked**, and every failure comes back in one `400`. Each `path` starts with where it came from: `body.email`, `query.page`, `params.id`. A missing body is reported at `body`.
+- **The handler gets the parsed values**, not the raw ones: coerced, defaults filled in, unknown keys stripped. `req.body`, `req.query` and `req.params` are left as they arrived, so read `input`, not `req`.
+- **Query and path values are strings.** Use `z.coerce.number()`, not `z.number()`, for `?page=2`.
+- **`z.object` drops unknown keys silently.** Use `z.strictObject` to reject them; each extra key is reported separately (`body.admin`, `Unrecognized field`).
+- **Async rules work.** Parsing uses `safeParseAsync`, so `.refine(async …)` is fine. A refine or transform that *throws*, rather than returning `false`, is a bug and becomes a `500`.
+- **A `ZodError` from inside the handler is a `500`, not a `400`.** Validating a database row or an upstream reply checks *your* data; if it fails, the client did nothing wrong. To reject a request for a business reason, throw a typed error (`BadRequestError`, `UnprocessableEntityError`) from the service.
+- **`response` is an allowlist.** The parsed value is what gets sent, so fields the schema doesn't name (`passwordHash`) are stripped before they leave.
+- **The return value is sent as-is**, not wrapped in the [`apiResponse`](../utils/apiResponse.util.ts) envelope. To use the envelope, call `apiResponse.ok(res, …)` in the handler (it receives `(input, req, res)`); `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
+- **Built for JSON routes.** On a non-`/api` route a `400` renders the `error` view, which shows the message but not `details`.
+
 ## Adding a client
 
 Export something configured and ready to use. Read settings from `config/`, never from `process.env` directly:

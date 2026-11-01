@@ -5,7 +5,7 @@
 ## What goes here
 - `express.Router()` instances
 - Route definitions: `router.get('/posts/:id', postController.getPost)`
-- Attaching route-level middleware (auth, validation): `router.post('/posts', requireAuth, postController.createPost)`
+- Attaching route-level middleware (auth): `router.post('/posts', requireAuth, postController.createPost)`
 
 ## What does NOT go here
 - ❌ Business logic (that's `services/`)
@@ -13,6 +13,8 @@
 - ❌ Request/response handling logic (that's `controllers/`)
 
 A route should be **one line**: "this URL → that controller."
+
+Request validation isn't attached here either. The controller declares its own schemas with [`route()`](../lib/http/route.lib.ts) (see [`controllers/`](../controllers/README.md#validated-endpoints-with-route)), and `routes/` may not import `lib/`.
 
 ## How routing is organized
 

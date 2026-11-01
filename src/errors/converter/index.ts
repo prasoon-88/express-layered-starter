@@ -1,7 +1,8 @@
 import httpConverter from './http.converter.ts';
 import jwtConverter from './jwt.converter.ts';
+import zodConverter from './zod.converter.ts';
 
-const converters = [httpConverter, jwtConverter];
+const converters = [zodConverter, httpConverter, jwtConverter];
 
 export const convertError = (err: unknown) => {
   for (const converter of converters) {

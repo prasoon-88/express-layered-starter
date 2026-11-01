@@ -15,6 +15,8 @@ const trustProxy = (value: string | undefined): boolean | number | string => {
 
 const ENV_CONSTANTS = {
   ENV: process.env.NODE_ENV || 'development',
+  // Opt-in, not derived from ENV: an unset NODE_ENV must not send stack traces to clients.
+  EXPOSE_ERROR_STACK: process.env.NODE_ENV === 'development',
   PORT: Number(process.env.PORT || '8000'),
   SERVICE_NAME: process.env.SERVICE_NAME || process.env.npm_package_name || 'app',
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',

@@ -39,7 +39,7 @@ const errorHandlerMiddleware: ErrorRequestHandler = (err: unknown, req, res, nex
     message: error.message,
     requestId: req.id,
     ...(error.details ? { details: error.details } : {}),
-    ...(ENV_CONSTANTS.ENV !== 'production' && {
+    ...(ENV_CONSTANTS.EXPOSE_ERROR_STACK && {
       stack: source instanceof Error ? source.stack : undefined,
     }),
   };

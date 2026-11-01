@@ -1,6 +1,6 @@
 # express-layered-starter
 
-A Node.js + Express starter built on a clean **layered architecture** (routes → controllers → services → repository). It ships the parts every backend needs and nobody enjoys rebuilding — request-scoped logging, an error hierarchy with framework converters, uniform API responses, and pagination — so a new project starts at the interesting part.
+A Node.js + Express starter built on a clean **layered architecture** (routes → controllers → services → repository). It ships the parts every backend needs and nobody enjoys rebuilding — request-scoped logging, an error hierarchy with framework converters, request validation, uniform API responses, and pagination — so a new project starts at the interesting part.
 
 `main` is **database-agnostic**. Each database integration lives on its own branch.
 
@@ -13,6 +13,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Structured JSON logging with secret redaction | [`lib/logger/`](src/lib/logger/) · [`logger.config.ts`](src/config/logger.config.ts) |
 | HTTP access logs with duration + slow-request warnings | [`httpLogger.middleware.ts`](src/middlewares/httpLogger.middleware.ts) |
 | Error class hierarchy + converters + central handler | [`errors/`](src/errors/) · [`error.middleware.ts`](src/middlewares/error.middleware.ts) |
+| Request validation (body, query, params, response) with Zod | [`lib/http/route.lib.ts`](src/lib/http/route.lib.ts) · [`zod.converter.ts`](src/errors/converter/zod.converter.ts) |
 | Uniform success/error response envelope | [`apiResponse.util.ts`](src/utils/apiResponse.util.ts) |
 | Validated pagination (parse, clamp, build meta) | [`paginator.util.ts`](src/utils/paginator.util.ts) |
 | Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.ts`](src/server.ts) |
@@ -26,6 +27,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 |------|---------|
 | [Express 5](https://expressjs.com/) | Web framework / HTTP server |
 | [pino](https://getpino.io/) | Structured JSON logging (`pino-pretty` in dev) |
+| [Zod 4](https://zod.dev/) | Request and response validation through [`route()`](src/lib/http/route.lib.ts) |
 | [EJS](https://ejs.co/) | Server-side rendered views |
 | [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | JWT — error converter wired, auth not yet built |
 | [helmet](https://helmetjs.github.io/) | Security headers, mounted on every response |
@@ -57,7 +59,7 @@ Create a `.env` in the project root — it is gitignored, never commit it:
 # General
 SERVICE_NAME=express-layered-starter
 PORT=8000
-NODE_ENV=development
+NODE_ENV=development                    # "development" also sends stack traces in error responses
 TRUST_PROXY=                            # hops to trust behind a proxy: a number (1, 2), true/false, or "loopback"/a subnet. Empty = false (local)
 
 # Logging
@@ -154,7 +156,7 @@ express-layered-starter/
     ├── contexts/        # AsyncLocalStorage — request-scoped state
     ├── controllers/     # HTTP layer (req/res), calls services
     ├── errors/          # error classes + framework error converters
-    ├── lib/             # wrappers around external systems (logger, process lifecycle)
+    ├── lib/             # wrappers around external systems (logger, process lifecycle, route())
     ├── middlewares/     # cross-cutting request concerns
     ├── models/          # data shapes / DB schemas
     ├── repository/      # database access only
@@ -222,7 +224,39 @@ const getUser = async (id) => {
 }
 ```
 
-The handler normalizes anything thrown — including framework errors from JWT or your database driver, via [`errors/converter/`](src/errors/converter/) — then logs it and responds in the right format: JSON for `/api` routes, a rendered `error` view otherwise. Stack traces are included outside production only.
+The handler normalizes anything thrown — including framework errors from JWT or your database driver, via [`errors/converter/`](src/errors/converter/) — then logs it and responds in the right format: JSON for `/api` routes, a rendered `error` view otherwise. Stack traces are included only when `NODE_ENV=development` is set explicitly; an unset `NODE_ENV` never exposes them.
+
+## Request validation
+
+Wrap a controller in [`route()`](src/lib/http/route.lib.ts) and give it Zod schemas. The handler receives parsed, typed input, and whatever it returns is sent as JSON:
+
+```js
+import { z } from 'zod'
+import { route } from '#lib/http/route.lib'
+
+export const createUser = route(
+    { body: z.object({ email: z.email(), name: z.string().min(1) }) },
+    ({ body }) => userService.createUser(body),   // body is already validated and typed
+    { status: 201 },
+)
+```
+
+Bad input never reaches the handler. Every failing field in `body`, `query` and `params` comes back in one `400`:
+
+```json
+{
+  "success": false,
+  "code": "BAD_REQUEST",
+  "message": "Validation Failed",
+  "requestId": "3f2b…",
+  "details": [
+    { "path": "body.email", "message": "Invalid email address" },
+    { "path": "query.page", "message": "Too small: expected number to be >=1" }
+  ]
+}
+```
+
+Only invalid input produces a `400`. Anything that goes wrong after that, including a Zod error thrown inside the handler or a return value that fails its `response` schema, is a server bug and returns a generic `500`. The full rules are in [`src/lib/README.md`](src/lib/README.md#http).
 
 ## Responses
 
@@ -301,7 +335,7 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] Security headers (`helmet`), static assets, and `trust proxy`
 - [ ] CORS (when a cross-origin client needs it)
 - [ ] Env validation (zod) — reject malformed values at boot
-- [ ] Input validation at the controller boundary
+- [x] Input validation at the controller boundary (`route()` + Zod)
 - [ ] Auth: register / login with JWT
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling

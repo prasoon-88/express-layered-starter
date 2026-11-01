@@ -94,6 +94,7 @@ Note what the controller does *not* do: no status codes picked by hand, no error
 | Ask yourself... | Put it in |
 |-----------------|-----------|
 | Does it touch `req` / `res`? | `controllers/` |
+| Does it check the shape of request input (types, formats, required fields)? | `controllers/`, as [`route()`](lib/http/route.lib.ts) schemas |
 | Is it a rule, decision, or sequence of steps? | `services/` |
 | Does it run a database query? | `repository/` |
 | Does it define a data shape/schema? | `models/` |
@@ -125,7 +126,7 @@ repository/  ← uses models
    ↑
 services/    ← uses repository, utils, lib, errors, config
    ↑
-controllers/ ← uses services, utils, errors
+controllers/ ← uses services, utils, errors, lib (route())
    ↑
 routes/      ← uses controllers + middlewares
 ```

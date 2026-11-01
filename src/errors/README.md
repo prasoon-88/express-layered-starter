@@ -5,7 +5,7 @@
 ## What goes here
 
 - Error classes extending `AppError` (one per HTTP failure category)
-- Converters in [`converter/`](converter/) that translate *foreign* errors (JWT, database drivers, Express) into our classes
+- Converters in [`converter/`](converter/) that translate *foreign* errors (Zod, JWT, database drivers, Express) into our classes
 - The barrel export in `index.ts`
 
 ## What does NOT go here
@@ -26,7 +26,7 @@ Every class extends `AppError`, which fixes the shape:
 | `details` | Optional structured extras (e.g. per-field validation errors) |
 | `isOperational` | `true` — an expected failure, not a bug |
 
-`isOperational` is the important one. Anything that reaches the handler *without* it is treated as an unexpected crash: logged with its original stack, reported as a generic 500, and never leaked to the client.
+`isOperational` is the important one. Anything that reaches the handler *without* it is treated as an unexpected crash: logged with its original stack, reported as a generic 500, and its message never sent to the client. The one exception is local debugging: with `NODE_ENV=development` set explicitly, every error response also carries the original `stack`. Any other value, including an unset `NODE_ENV`, leaves it out.
 
 Available: `BadRequestError` · `UnauthorizedError` · `ForbiddenError` · `NotFoundError` · `ConflictError` · `UnprocessableEntityError` · `TooManyRequestsError` · `InternalServerError` · `ServiceUnavailableError`
 
@@ -43,13 +43,13 @@ if (existing) {
 }
 ```
 
-With field details:
+With field details, in the same `{ path, message }` shape that request validation produces, so clients parse one format:
 
 ```js
 import { UnprocessableEntityError } from '#errors'
 
 throw new UnprocessableEntityError('Validation failed', ERROR_CODES.VALIDATION_FAILED, [
-    { field: 'email', message: 'must be a valid address' },
+    { path: 'email', message: 'must be a valid address' },
 ])
 ```
 
@@ -66,6 +66,16 @@ const jwtConverter = (err) => {
 ```
 
 Converters run in order until one returns something. Add a new one to the array in [`converter/index.ts`](converter/index.ts).
+
+On `main` they run in this order:
+
+| Converter | Recognizes | Becomes |
+|-----------|------------|---------|
+| [`zod.converter.ts`](converter/zod.converter.ts) | a `ZodError` from request validation in [`route()`](../lib/http/route.lib.ts) | `400 BAD_REQUEST`, `details: [{ path, message }]` |
+| [`http.converter.ts`](converter/http.converter.ts) | body-parser errors (bad JSON, body too large, bad charset), and other `http-errors` with `expose: true` | `400` / `413` / `415`, or the error's own 4xx status |
+| [`jwt.converter.ts`](converter/jwt.converter.ts) | `TokenExpiredError`, `NotBeforeError`, `JsonWebTokenError` | `401` |
+
+The Zod converter only ever sees *input* errors. `route()` wraps a `ZodError` thrown inside a handler in a plain `Error`, so that one is reported as a `500` (it means your own data failed a check), not as a `400` blaming the client.
 
 > The database-specific converter lives on the branch for that database, not on `main`.
 
