@@ -12,9 +12,9 @@
 - ❌ Values that differ per environment or that you might tune (that's `config/`)
 - ❌ Logic or functions
 
-## The one exception: `env.constant.ts`
+## The one exception: `env/`
 
-[`env.constant.ts`](env.constant.ts) is the single file allowed to read `process.env`. It reads each variable once, applies a default, and coerces the type — so `PORT` is a number and `LOG_IGNORE_PATHS` is an array by the time anyone else sees it.
+[`env/`](env/) is the only place allowed to read `process.env`. [`env/schema.ts`](env/schema.ts) validates every variable with Zod, applies defaults and coerces types — so `PORT` is a number and `LOG_IGNORE_PATHS` is an array by the time anyone else sees it. [`env/index.ts`](env/index.ts) parses `process.env` once at startup and exports the frozen result as `ENV_CONSTANTS`. An invalid environment stops the app before it serves a request.
 
 It lives here rather than in `config/` because the *list of variables the app understands* is itself a fixed fact. Everything downstream, `config/` included, imports `ENV_CONSTANTS` and never touches `process.env` again.
 

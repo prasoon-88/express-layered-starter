@@ -1,9 +1,9 @@
-import ENV_CONSTANTS from '#constants/env.constant';
+import ENV_CONSTANTS from '#constants/env/index';
 
-const isProd = ENV_CONSTANTS.ENV == 'production';
+const isProd = ENV_CONSTANTS.NODE_ENV === 'production';
 
 export const loggerConfig = Object.freeze({
-  env: ENV_CONSTANTS.ENV,
+  env: ENV_CONSTANTS.NODE_ENV,
   service: ENV_CONSTANTS.SERVICE_NAME,
   level: ENV_CONSTANTS.LOG_LEVEL,
   pretty: ENV_CONSTANTS.LOG_PRETTY || !isProd,

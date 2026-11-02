@@ -18,19 +18,19 @@
 ```
 .env                      actual values (gitignored)
   ↓ process.env.X
-constants/env.constant.ts reads process.env once, applies defaults, coerces types
+constants/env/            reads process.env once, validates it (Zod), applies defaults, coerces types
   ↓ ENV_CONSTANTS.X
 config/                   shapes it into a settings object per concern   ← YOU ARE HERE
   ↓ someConfig.x
 your code                 never touches process.env directly
 ```
 
-Note the extra step: **`env.constant.ts` is the only file in the app that reads `process.env`.** Config files import from it rather than reaching for the environment themselves, so every variable has exactly one declared default and one place to look it up.
+Note the extra step: **`constants/env/` is the only place in the app that reads `process.env`.** Config files import from it rather than reaching for the environment themselves, so every variable has exactly one declared default and one place to look it up.
 
 ## Example
 ```js
 // config/auth.config.ts
-import ENV_CONSTANTS from '#constants/env.constant'
+import ENV_CONSTANTS from '#constants/env/index'
 
 export const authConfig = Object.freeze({
     jwtSecret: ENV_CONSTANTS.JWT_SECRET,      // from .env, never hardcoded

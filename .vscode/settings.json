@@ -1,0 +1,65 @@
+{
+  // Shared editor settings for this repo. Personal taste (theme, font, auto-save) stays in user settings.
+  // These only make the editor match what CI enforces: Prettier, ESLint, and the project's TypeScript.
+
+  // ---------- Formatting: Prettier owns style (.prettierrc.json) ----------
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  // Never format with Prettier's defaults: no config file found means no formatting.
+  "prettier.requireConfig": true,
+
+  // Per-language copies are deliberate: a language-specific user setting
+  // (e.g. "[typescript]": { "editor.defaultFormatter": ... }) beats a general workspace one.
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[yaml]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+  // ---------- Linting: apply ESLint auto-fixes on save ----------
+  // "explicit" = on Ctrl+S and focus-change saves, not on delay-based auto-saves.
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  // ---------- TypeScript: use the repo's compiler, not VS Code's bundled one ----------
+  // Same version as `pnpm typecheck` and CI, so the editor shows the same errors.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // ---------- Files: match .gitattributes (eol=lf) and Prettier ----------
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+  // Two trailing spaces are a line break in Markdown.
+  "[markdown]": { "files.trimTrailingWhitespace": false },
+
+  // ---------- Editor: visual hints matching .prettierrc.json ----------
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+  "editor.rulers": [100],
+
+  // ---------- Search: skip generated output ----------
+  "search.exclude": {
+    "dist": true,
+    "coverage": true,
+    "**/*.tsbuildinfo": true,
+    "pnpm-lock.yaml": true
+  },
+
+  // ---------- Tooling ----------
+  "npm.packageManager": "pnpm",
+
+  // Project vocabulary, so the spell checker stops flagging real terms.
+  "cSpell.words": [
+    "connrefused",
+    "linklocal",
+    "nvmrc",
+    "pino",
+    "stringbool",
+    "tsbuildinfo",
+    "uniquelocal"
+  ]
+}

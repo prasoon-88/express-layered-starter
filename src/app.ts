@@ -6,7 +6,7 @@ import errorHandlerMiddleware from '#middlewares/error.middleware';
 import requestIdMiddleware from '#middlewares/requestId.middleware';
 import httpLoggerMiddleware from '#middlewares/httpLogger.middleware';
 import helmet from 'helmet';
-import ENV_CONSTANTS from '#constants/env.constant';
+import ENV_CONSTANTS from '#constants/env/index';
 
 const app = express();
 

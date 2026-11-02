@@ -74,6 +74,22 @@ export default defineConfig([
     },
   },
 
+  // node:test's describe/it return promises, but the runner awaits them itself.
+  // This allow-list is typescript-eslint's documented setting for node:test; other promises stay checked.
+  {
+    files: ['**/*.test.ts'],
+    rules: {
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        {
+          allowForKnownSafeCalls: [
+            { from: 'package', package: 'node:test', name: ['describe', 'it', 'test', 'suite'] },
+          ],
+        },
+      ],
+    },
+  },
+
   // Plain JS files (this config) are not in tsconfig.json, so type-aware rules cannot run on them.
   {
     files: ['**/*.js'],

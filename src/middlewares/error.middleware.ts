@@ -1,5 +1,5 @@
 import type { ErrorRequestHandler, Request } from 'express';
-import ENV_CONSTANTS from '#constants/env.constant';
+import ENV_CONSTANTS from '#constants/env/index';
 import { AppError, InternalServerError } from '#errors';
 import { convertError } from '#errors/converter/index';
 import logger from '#lib/logger/index';

@@ -1,0 +1,8 @@
+{
+  // VS Code offers to install these when someone opens the repo.
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}

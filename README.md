@@ -53,27 +53,16 @@ pnpm install
 
 ### Environment
 
-Create a `.env` in the project root — it is gitignored, never commit it:
+Copy [`.env.example`](.env.example) to `.env` in the project root — `.env` is gitignored, never commit it:
 
 ```bash
-# General
-SERVICE_NAME=express-layered-starter
-PORT=8000
-NODE_ENV=development                    # "development" also sends stack traces in error responses
-TRUST_PROXY=                            # hops to trust behind a proxy: a number (1, 2), true/false, or "loopback"/a subnet. Empty = false (local)
-
-# Logging
-LOG_LEVEL=info                          # trace | debug | info | warn | error | fatal
-LOG_PRETTY=true                         # human-readable output; JSON when false
-LOG_IGNORE_PATHS=/health,/favicon.ico   # paths excluded from access logs
-LOG_SLOW_MS=1000                        # requests at or above this are logged as warnings
-
-# Shutdown
-SHUTDOWN_TIMEOUT_MS=8000                # total budget (ms) before a stuck shutdown is force-killed
-SHUTDOWN_DELAY_MS=5000                  # ms to keep serving after SIGTERM/SIGINT so load balancers can drain us (0 = none)
+cp .env.example .env
 ```
 
-Every variable has a fallback in [`src/constants/env.constant.ts`](src/constants/env.constant.ts), so the app boots with an empty `.env`.
+The environment is validated at boot by the Zod schema in [`src/constants/env/schema.ts`](src/constants/env/schema.ts). A missing or malformed value stops the app with a message naming the variable (the value itself is never printed).
+
+- **`NODE_ENV` is required** (`development` | `test` | `production`). There is no default on purpose: a deploy that forgets it must fail, not silently run as `development` and send stack traces to clients.
+- Every other variable has a default, and an empty value (`KEY=`) counts as unset.
 
 `SHUTDOWN_DELAY_MS` must be smaller than `SHUTDOWN_TIMEOUT_MS`, or the app refuses to start. Set it to `0` locally so Ctrl+C exits at once; see [`src/lib/README.md`](src/lib/README.md#lifecycle) for tuning per platform.
 
@@ -105,7 +94,7 @@ Type errors are caught at four gates, each stricter than the last:
 | Editor | as you type (`tsconfig.json`) | nothing — just red squiggles |
 | `pre-commit` hook | `lint-staged`: ESLint `--fix` + Prettier on staged files | the commit |
 | `pre-push` hook | `pnpm typecheck` + `pnpm lint` on the whole project | the push |
-| CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) | typecheck → lint → format → build → boot `dist/` and hit `/health/live` | the merge |
+| CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) | typecheck → lint → format → test → build → boot `dist/` and hit `/health/live` | the merge |
 
 **Two tsconfigs, one set of rules.** [`tsconfig.json`](tsconfig.json) holds every compiler rule and never emits — the editor, `pnpm typecheck` and typed ESLint all read it. [`tsconfig.build.json`](tsconfig.build.json) extends it and only adds output settings: `src/` → `dist/`, source maps, and `noEmitOnError` so a type error produces no build at all.
 
@@ -321,7 +310,8 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 | `pnpm lint` | ESLint (type-aware rules + layered-import enforcement) |
 | `pnpm format` | Rewrite files with Prettier |
 | `pnpm format:check` | Verify formatting without writing |
-| `pnpm check` | Everything CI runs: typecheck → lint → format:check → build |
+| `pnpm test` | Run `src/**/*.test.ts` with Node's built-in test runner (no Jest/Vitest) |
+| `pnpm check` | Everything CI runs: typecheck → lint → format:check → test → build |
 
 ## Roadmap
 
@@ -334,9 +324,9 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] Form body parsing (`express.urlencoded`) and static file serving
 - [x] Security headers (`helmet`), static assets, and `trust proxy`
 - [ ] CORS (when a cross-origin client needs it)
-- [ ] Env validation (zod) — reject malformed values at boot
+- [x] Env validation (zod) — reject malformed values at boot
 - [x] Input validation at the controller boundary (`route()` + Zod)
 - [ ] Auth: register / login with JWT
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
-- [ ] Tests
+- [ ] Tests — env schema covered; HTTP tests (`supertest`) next

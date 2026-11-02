@@ -1,4 +1,4 @@
-import ENV_CONSTANTS from '#constants/env.constant';
+import ENV_CONSTANTS from '#constants/env/index';
 
 export const lifecycleConfig = Object.freeze({
   shutdownTimeoutMs: ENV_CONSTANTS.SHUTDOWN_TIMEOUT_MS,
