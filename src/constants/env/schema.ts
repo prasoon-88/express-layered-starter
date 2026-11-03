@@ -1,3 +1,8 @@
+import {
+  CORS_DEFAULT_HEADERS,
+  CORS_DEFAULT_EXPOSED_HEADERS,
+} from '#constants/http/httpHeaders.constant';
+import { DEFAULT_CORS_METHODS, HTTP_METHODS } from '#constants/http/methods.constant';
 import { isIP } from 'node:net';
 import type { LevelWithSilent } from 'pino';
 import * as z from 'zod';
@@ -48,6 +53,17 @@ const trustProxy = () =>
     .refine(isValidTrustProxy, 'Expected true, false, a hop count, or loopback/IP/CIDR values')
     .transform(toTrustProxy);
 
+const isOriginRule = (v: string) => {
+  if (v === '*') return true;
+  const probe = v.replace('://*.', '://x.');
+  if (probe.includes('*')) return false;
+  try {
+    return new URL(probe).origin === probe;
+  } catch {
+    return false;
+  }
+};
+
 const wholeNumber = ({ min = 0, max = Number.MAX_SAFE_INTEGER } = {}) =>
   z
     .string()
@@ -90,6 +106,27 @@ const envSchema = z.preprocess(
       LOG_SLOW_MS: wholeNumber().default(1000),
       SHUTDOWN_TIMEOUT_MS: wholeNumber({ max: MAX_TIMER_MS }).default(8000),
       SHUTDOWN_DELAY_MS: wholeNumber({ max: MAX_TIMER_MS }).default(5000),
+      CORS_ENABLED: bool(false),
+      CORS_ORIGINS: list
+        .pipe(
+          z.array(
+            z
+              .string()
+              .refine(
+                isOriginRule,
+                'Expected "*", an exact origin (https://app.example.com), or https://*.example.com (no path, no trailing slash)',
+              ),
+          ),
+        )
+        .default([]),
+      CORS_CREDENTIALS: bool(),
+      CORS_METHODS: list
+        .transform((a) => a.map((v) => v.toUpperCase()))
+        .pipe(z.array(z.enum(HTTP_METHODS)))
+        .default([...DEFAULT_CORS_METHODS]),
+      CORS_ALLOWED_HEADERS: list.default([...CORS_DEFAULT_HEADERS]),
+      CORS_EXPOSED_HEADERS: list.default([...CORS_DEFAULT_EXPOSED_HEADERS]),
+      CORS_MAX_AGE_S: wholeNumber().default(600),
     })
     .superRefine((e, ctx) => {
       if (e.SHUTDOWN_DELAY_MS >= e.SHUTDOWN_TIMEOUT_MS)
@@ -99,18 +136,46 @@ const envSchema = z.preprocess(
           message: 'Must be less than SHUTDOWN_TIMEOUT_MS',
         });
 
-      if (e.NODE_ENV === 'production' && e.LOG_PRETTY)
-        ctx.addIssue({
-          code: 'custom',
-          path: ['LOG_PRETTY'],
-          message: 'Disable in production',
-        });
-      if (e.NODE_ENV === 'production' && e.TRUST_PROXY === true)
-        ctx.addIssue({
-          code: 'custom',
-          path: ['TRUST_PROXY'],
-          message: 'Use a hop count or CIDR in production',
-        });
+      if (e.NODE_ENV === 'production') {
+        if (e.LOG_PRETTY)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['LOG_PRETTY'],
+            message: 'Disable in production',
+          });
+        if (e.TRUST_PROXY === true)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['TRUST_PROXY'],
+            message: 'Use a hop count or CIDR in production',
+          });
+      }
+
+      if (e.CORS_ENABLED) {
+        if (!e.CORS_ORIGINS.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['CORS_ORIGINS'],
+            message: 'Required when CORS_ENABLED=true',
+          });
+        const wildcard = e.CORS_ORIGINS.includes('*');
+        if (wildcard) {
+          if (e.CORS_CREDENTIALS) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['CORS_CREDENTIALS'],
+              message: 'Cannot combine with CORS_ORIGINS="*" (browsers reject it)',
+            });
+          }
+          if (e.NODE_ENV === 'production') {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['CORS_ORIGINS'],
+              message: 'Wildcard not allowed in production; list exact origins',
+            });
+          }
+        }
+      }
     })
     .transform(({ npm_package_name, ...e }) => ({
       ...e,

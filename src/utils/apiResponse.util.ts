@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 import requestContext from '#contexts/requestContext';
-import HTTP_STATUS from '#constants/httpStatus.constant';
+import HTTP_STATUS from '#constants/http/httpStatus.constant';
 import { Paginator, type PaginationInput } from '#utils/paginator.util';
 import { getLogger } from '#lib/logger/index';
 

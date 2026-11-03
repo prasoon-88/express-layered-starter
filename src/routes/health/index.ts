@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import HTTP_HEADERS from '#constants/httpHeaders.constant';
+import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
 import { healthController } from '#controllers/health/index';
 
 const HEALTH_ROUTER = Router();

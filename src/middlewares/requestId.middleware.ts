@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestHandler } from 'express';
-import HTTP_HEADERS from '#constants/httpHeaders.constant';
+import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
 import REGEX from '#constants/regex.constant';
 import requestContext from '#contexts/requestContext';
 

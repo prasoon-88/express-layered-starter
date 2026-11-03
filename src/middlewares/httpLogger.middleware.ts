@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import type { Logger } from 'pino';
 import defaultLogger from '#lib/logger/index';
 import { loggerConfig } from '#config/logger.config';
-import HTTP_HEADERS from '#constants/httpHeaders.constant';
+import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
 
 interface HttpLoggerOptions {
   logger?: Logger;

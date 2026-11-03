@@ -19,6 +19,13 @@ describe('parseEnv', () => {
         LOG_SLOW_MS: 1000,
         SHUTDOWN_TIMEOUT_MS: 8000,
         SHUTDOWN_DELAY_MS: 5000,
+        CORS_ENABLED: false,
+        CORS_ORIGINS: [],
+        CORS_CREDENTIALS: false,
+        CORS_METHODS: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        CORS_ALLOWED_HEADERS: ['Content-Type', 'Authorization'],
+        CORS_EXPOSED_HEADERS: ['X-Request-Id'],
+        CORS_MAX_AGE_S: 600,
         EXPOSE_ERROR_STACK: false,
       });
     });

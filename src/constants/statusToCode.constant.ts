@@ -1,5 +1,5 @@
-import ERROR_CODES, { type ErrorCode } from './errorCodes.constant.ts';
-import HTTP_STATUS from './httpStatus.constant.ts';
+import ERROR_CODES, { type ErrorCode } from './error/errorCodes.constant.ts';
+import HTTP_STATUS from './http/httpStatus.constant.ts';
 
 const STATUS_TO_CODE: Readonly<Record<number, ErrorCode>> = {
   [HTTP_STATUS.BAD_REQUEST]: ERROR_CODES.BAD_REQUEST,

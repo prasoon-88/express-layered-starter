@@ -1,6 +1,6 @@
 import { ZodError } from 'zod';
 import { BadRequestError } from '#errors';
-import ERROR_CODES from '#constants/errorCodes.constant';
+import ERROR_CODES from '#constants/error/errorCodes.constant';
 
 // One entry per failing field. An unrecognized-keys issue sits on the parent object,
 // so it is expanded into one entry per extra key, with that key in the path.

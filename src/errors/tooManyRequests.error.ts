@@ -1,6 +1,6 @@
-import ERROR_CODES from '#constants/errorCodes.constant';
-import HTTP_STATUS from '#constants/httpStatus.constant';
-import type { AppErrorCode } from '#constants/appErrorCodes.constant';
+import ERROR_CODES from '#constants/error/errorCodes.constant';
+import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import type { AppErrorCode } from '#constants/error/appErrorCodes.constant';
 import AppError from './app.error.ts';
 
 class TooManyRequestsError extends AppError {

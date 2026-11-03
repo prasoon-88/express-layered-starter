@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import ERROR_CODES from '#constants/errorCodes.constant';
+import ERROR_CODES from '#constants/error/errorCodes.constant';
 import { NotFoundError } from '#errors';
 
 const notFoundMiddleware: RequestHandler = (req, res, next) => {

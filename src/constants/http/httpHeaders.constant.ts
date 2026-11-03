@@ -71,4 +71,9 @@ export const CONTENT_TYPES = Object.freeze({
   OCTET_STREAM: 'application/octet-stream',
 });
 
+export const CORS_DEFAULT_HEADERS = [HTTP_HEADERS.CONTENT_TYPE, HTTP_HEADERS.AUTHORIZATION];
+
+// Browsers hide non-standard response headers from page JS unless listed here.
+export const CORS_DEFAULT_EXPOSED_HEADERS = [HTTP_HEADERS.X_REQUEST_ID];
+
 export default HTTP_HEADERS;

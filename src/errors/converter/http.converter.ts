@@ -1,5 +1,5 @@
-import HTTP_STATUS from '#constants/httpStatus.constant';
-import APP_ERROR_CODES from '#constants/appErrorCodes.constant';
+import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
 import STATUS_TO_CODE from '#constants/statusToCode.constant';
 import { AppError } from '#errors';
 

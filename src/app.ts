@@ -7,6 +7,7 @@ import requestIdMiddleware from '#middlewares/requestId.middleware';
 import httpLoggerMiddleware from '#middlewares/httpLogger.middleware';
 import helmet from 'helmet';
 import ENV_CONSTANTS from '#constants/env/index';
+import corsMiddleware from '#middlewares/cors.middleware';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.set('views', PATHS.VIEWS.path);
 app.use(helmet());
 app.use(requestIdMiddleware());
 app.use(httpLoggerMiddleware());
+if (ENV_CONSTANTS.CORS_ENABLED) app.use(corsMiddleware()); // before auth, rate limiting, and routes
 app.use(express.static(PATHS.PUBLIC.path));
 
 // Routes
