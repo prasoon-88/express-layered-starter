@@ -3,6 +3,21 @@ import {
   CORS_DEFAULT_EXPOSED_HEADERS,
 } from '#constants/http/httpHeaders.constant';
 import { DEFAULT_CORS_METHODS, HTTP_METHODS } from '#constants/http/methods.constant';
+import {
+  DEFAULT_RATE_LIMIT_AUTH_BLOCK_S,
+  DEFAULT_RATE_LIMIT_AUTH_MAX,
+  DEFAULT_RATE_LIMIT_AUTH_WINDOW_S,
+  DEFAULT_RATE_LIMIT_IPV6_SUBNET,
+  DEFAULT_RATE_LIMIT_MAX,
+  DEFAULT_RATE_LIMIT_POLICY_REFRESH_S,
+  DEFAULT_RATE_LIMIT_SKIP_PATHS,
+  DEFAULT_RATE_LIMIT_STORE,
+  DEFAULT_RATE_LIMIT_WINDOW_S,
+  DEFAULT_STORE_ERROR_MODE,
+  RATE_LIMIT_STORES,
+  STORE_ERROR_MODES,
+} from '#constants/rateLimit.constants';
+import REGEX from '#constants/regex.constant';
 import { isIP } from 'node:net';
 import type { LevelWithSilent } from 'pino';
 import * as z from 'zod';
@@ -127,6 +142,26 @@ const envSchema = z.preprocess(
       CORS_ALLOWED_HEADERS: list.default([...CORS_DEFAULT_HEADERS]),
       CORS_EXPOSED_HEADERS: list.default([...CORS_DEFAULT_EXPOSED_HEADERS]),
       CORS_MAX_AGE_S: wholeNumber().default(600),
+      REDIS_URL: z
+        .string()
+        .trim()
+        .regex(REGEX.REDIS_URL, 'Expected a redis:// or rediss:// URL')
+        .optional(),
+      RATE_LIMIT_ENABLED: bool(true),
+      RATE_LIMIT_STORE: z.enum(RATE_LIMIT_STORES).default(DEFAULT_RATE_LIMIT_STORE),
+      RATE_LIMIT_ON_STORE_ERROR: z.enum(STORE_ERROR_MODES).default(DEFAULT_STORE_ERROR_MODE),
+      RATE_LIMIT_WINDOW_S: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_WINDOW_S),
+      RATE_LIMIT_MAX: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_MAX),
+      RATE_LIMIT_AUTH_WINDOW_S: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_AUTH_WINDOW_S),
+      RATE_LIMIT_AUTH_MAX: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_AUTH_MAX),
+      RATE_LIMIT_AUTH_BLOCK_S: wholeNumber().default(DEFAULT_RATE_LIMIT_AUTH_BLOCK_S),
+      RATE_LIMIT_IPV6_SUBNET: wholeNumber({ min: 32, max: 128 }).default(
+        DEFAULT_RATE_LIMIT_IPV6_SUBNET,
+      ),
+      RATE_LIMIT_POLICY_REFRESH_S: wholeNumber().default(DEFAULT_RATE_LIMIT_POLICY_REFRESH_S),
+      RATE_LIMIT_SKIP_PATHS: list
+        .pipe(z.array(z.string().startsWith('/', 'Each path must start with "/"')))
+        .default([...DEFAULT_RATE_LIMIT_SKIP_PATHS]),
     })
     .superRefine((e, ctx) => {
       if (e.SHUTDOWN_DELAY_MS >= e.SHUTDOWN_TIMEOUT_MS)
@@ -174,6 +209,16 @@ const envSchema = z.preprocess(
               message: 'Wildcard not allowed in production; list exact origins',
             });
           }
+        }
+      }
+
+      if (e.RATE_LIMIT_ENABLED) {
+        if (e.RATE_LIMIT_STORE === 'redis' && !e.REDIS_URL) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['REDIS_URL'],
+            message: 'Required when RATE_LIMIT_STORE=redis',
+          });
         }
       }
     })

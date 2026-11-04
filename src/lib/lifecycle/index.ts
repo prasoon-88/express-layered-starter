@@ -4,11 +4,13 @@ import { lifecycleConfig } from '#config/lifecycle.config';
 import { getLogger } from '#lib/logger/index';
 import { sleep } from '#utils/sleep.util';
 import lifecycleState from './state.ts';
+import type { RateLimiter } from '#rateLimiter';
 
 type ShutdownHook = () => void | Promise<void>;
 
 interface ProcessHandlerOptions {
   server: Server;
+  rateLimiter?: Awaited<RateLimiter>;
   hooks?: ShutdownHook[];
   logger?: Logger;
   timeoutMs?: number;
@@ -24,6 +26,7 @@ const isServerNotRunning = (err: Error) => 'code' in err && err.code === 'ERR_SE
 
 export const registerProcessHandler = ({
   server,
+  rateLimiter,
   hooks = [],
   logger = getLogger('lifecycle'),
   timeoutMs = lifecycleConfig.shutdownTimeoutMs,
@@ -74,6 +77,7 @@ export const registerProcessHandler = ({
     try {
       if (drain && drainDelayMs) await sleep(drainDelayMs);
       await closeServer();
+      if (rateLimiter) await rateLimiter.close();
       if (await runHooks()) exitCode = 1;
     } catch (err) {
       logger.error({ err }, 'error during shutdown');

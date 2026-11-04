@@ -8,26 +8,30 @@ import httpLoggerMiddleware from '#middlewares/httpLogger.middleware';
 import helmet from 'helmet';
 import ENV_CONSTANTS from '#constants/env/index';
 import corsMiddleware from '#middlewares/cors.middleware';
+import { rateLimiter } from './server.ts';
 
-const app = express();
+export const createApp = () => {
+  const app = express();
 
-// Application settings config
-app.set('trust proxy', ENV_CONSTANTS.TRUST_PROXY);
-app.set('view engine', 'ejs');
-app.set('views', PATHS.VIEWS.path);
+  // Application settings config
+  app.set('trust proxy', ENV_CONSTANTS.TRUST_PROXY);
+  app.set('view engine', 'ejs');
+  app.set('views', PATHS.VIEWS.path);
 
-// Pre Middlewares
-app.use(helmet());
-app.use(requestIdMiddleware());
-app.use(httpLoggerMiddleware());
-if (ENV_CONSTANTS.CORS_ENABLED) app.use(corsMiddleware()); // before auth, rate limiting, and routes
-app.use(express.static(PATHS.PUBLIC.path));
+  // Pre Middlewares
+  app.use(helmet());
+  app.use(requestIdMiddleware());
+  app.use(httpLoggerMiddleware());
+  if (ENV_CONSTANTS.CORS_ENABLED) app.use(corsMiddleware()); // before auth, rate limiting, and routes
+  rateLimiter.limit('global');
+  app.use(express.static(PATHS.PUBLIC.path));
 
-// Routes
-app.use('/', ROUTES);
+  // Routes
+  app.use('/', ROUTES);
 
-// Post Middlewares
-app.use(notFoundMiddleware);
-app.use(errorHandlerMiddleware);
+  // Post Middlewares
+  app.use(notFoundMiddleware);
+  app.use(errorHandlerMiddleware);
 
-export default app;
+  return app;
+};

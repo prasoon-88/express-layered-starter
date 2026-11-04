@@ -15,11 +15,12 @@ const ALLOW = {
   lib: ['config', 'constants', 'contexts', 'utils'],
   utils: ['config', 'constants', 'contexts', 'errors', 'lib'],
   models: ['constants'],
+  schemas: ['constants'],
   repository: ['models', 'utils', 'lib', 'errors', 'config', 'constants'],
   services: ['repository', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
   controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants'],
   routes: ['controllers', 'middlewares', 'constants', 'config'],
-  middlewares: ['errors', 'lib', 'config', 'constants', 'contexts'],
+  middlewares: ['errors', 'lib', 'config', 'constants', 'contexts', 'schemas'],
 };
 
 const LAYERS = Object.keys(ALLOW);
