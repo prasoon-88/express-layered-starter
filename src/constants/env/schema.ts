@@ -162,65 +162,63 @@ const envSchema = z.preprocess(
       RATE_LIMIT_SKIP_PATHS: list
         .pipe(z.array(z.string().startsWith('/', 'Each path must start with "/"')))
         .default([...DEFAULT_RATE_LIMIT_SKIP_PATHS]),
+      LB_IDLE_TIMEOUT_MS: wholeNumber().default(60),
+      HTTP_KEEP_ALIVE_TIMEOUT_MS: wholeNumber().default(65),
+      HTTP_HEADERS_TIMEOUT_MS: wholeNumber().default(66),
+      HTTP_REQUEST_TIMEOUT_MS: wholeNumber().default(120),
+      REQUEST_TIMEOUT_MS: wholeNumber().default(30),
     })
     .superRefine((e, ctx) => {
-      if (e.SHUTDOWN_DELAY_MS >= e.SHUTDOWN_TIMEOUT_MS)
+      const addIssue = (path: string[], message: string) =>
         ctx.addIssue({
           code: 'custom',
-          path: ['SHUTDOWN_DELAY_MS'],
-          message: 'Must be less than SHUTDOWN_TIMEOUT_MS',
+          path,
+          message,
         });
 
+      if (e.SHUTDOWN_DELAY_MS >= e.SHUTDOWN_TIMEOUT_MS)
+        addIssue(['SHUTDOWN_DELAY_MS'], 'Must be less than SHUTDOWN_TIMEOUT_MS');
+
       if (e.NODE_ENV === 'production') {
-        if (e.LOG_PRETTY)
-          ctx.addIssue({
-            code: 'custom',
-            path: ['LOG_PRETTY'],
-            message: 'Disable in production',
-          });
+        if (e.LOG_PRETTY) addIssue(['LOG_PRETTY'], 'Disable in production');
+
         if (e.TRUST_PROXY === true)
-          ctx.addIssue({
-            code: 'custom',
-            path: ['TRUST_PROXY'],
-            message: 'Use a hop count or CIDR in production',
-          });
+          addIssue(['TRUST_PROXY'], 'Use a hop count or CIDR in production');
       }
 
       if (e.CORS_ENABLED) {
-        if (!e.CORS_ORIGINS.length)
-          ctx.addIssue({
-            code: 'custom',
-            path: ['CORS_ORIGINS'],
-            message: 'Required when CORS_ENABLED=true',
-          });
+        if (!e.CORS_ORIGINS.length) addIssue(['CORS_ORIGINS'], 'Required when CORS_ENABLED=true');
+
         const wildcard = e.CORS_ORIGINS.includes('*');
         if (wildcard) {
-          if (e.CORS_CREDENTIALS) {
-            ctx.addIssue({
-              code: 'custom',
-              path: ['CORS_CREDENTIALS'],
-              message: 'Cannot combine with CORS_ORIGINS="*" (browsers reject it)',
-            });
-          }
-          if (e.NODE_ENV === 'production') {
-            ctx.addIssue({
-              code: 'custom',
-              path: ['CORS_ORIGINS'],
-              message: 'Wildcard not allowed in production; list exact origins',
-            });
-          }
+          if (e.CORS_CREDENTIALS)
+            addIssue(
+              ['CORS_CREDENTIALS'],
+              'Cannot combine with CORS_ORIGINS="*" (browsers reject it)',
+            );
+
+          if (e.NODE_ENV === 'production')
+            addIssue(['CORS_ORIGINS'], 'Wildcard not allowed in production; list exact origins');
         }
       }
 
       if (e.RATE_LIMIT_ENABLED) {
         if (e.RATE_LIMIT_STORE === 'redis' && !e.REDIS_URL) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['REDIS_URL'],
-            message: 'Required when RATE_LIMIT_STORE=redis',
-          });
+          addIssue(['REDIS_URL'], 'Required when RATE_LIMIT_STORE=redis');
         }
       }
+
+      if (e.HTTP_KEEP_ALIVE_TIMEOUT_MS <= e.LB_IDLE_TIMEOUT_MS)
+        addIssue(
+          ['HTTP_KEEP_ALIVE_TIMEOUT_MS'],
+          'must exceed LB_IDLE_TIMEOUT_MS ( LB_IDLE_TIMEOUT_MS < HTTP_KEEP_ALIVE_TIMEOUT_MS )',
+        );
+
+      if (e.HTTP_HEADERS_TIMEOUT_MS > e.HTTP_REQUEST_TIMEOUT_MS)
+        addIssue(
+          ['HTTP_REQUEST_TIMEOUT_MS'],
+          'must exceed HTTP_HEADERS_TIMEOUT_MS ( HTTP_HEADERS_TIMEOUT_MS < HTTP_REQUEST_TIMEOUT_MS )',
+        );
     })
     .transform(({ npm_package_name, ...e }) => ({
       ...e,
