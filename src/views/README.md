@@ -35,5 +35,11 @@ app.set('view engine', 'ejs')
 app.set('views', PATHS.VIEWS.path)
 ```
 
+`VIEWS` is `views/` next to the code that renders it: `src/views` in dev and `dist/views` in production. `tsc` only compiles `.ts`, so `pnpm build` runs [`scripts/copy-views.js`](../../scripts/copy-views.js) to copy the `.ejs` files into `dist/`. A new template needs nothing extra: it is copied with the rest. CI deletes `src/` before its smoke test, so a template that does not reach `dist/` fails the build.
+
+## Variables every template can use
+- `appName`: set once in `app.ts` from `SERVICE_NAME`, and shown in the navbar. Read it with `locals.appName` so a template that renders without it still works.
+- Anything the controller passes to `res.render(...)`, such as `title`.
+
 ## Rule of thumb
 > Views are for display only. If you see a `db.` call or a business rule inside a template, it's in the wrong place — move it to the controller/service and pass the result in.

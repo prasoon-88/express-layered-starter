@@ -13,8 +13,5 @@ export const DEFAULT_RATE_LIMIT_AUTH_MAX: number = 10;
 export const DEFAULT_RATE_LIMIT_AUTH_BLOCK_S: number = 900;
 export const DEFAULT_RATE_LIMIT_POLICY_REFRESH_S: number = 30;
 export const DEFAULT_RATE_LIMIT_IPV6_SUBNET: number = 56;
-export const DEFAULT_RATE_LIMIT_SKIP_PATHS: string[] = [
-  '/health',
-  '/health/live',
-  '/health/ready',
-] as const;
+// Health probes never reach the limiter (app.ts mounts them first), so nothing is skipped by default.
+export const DEFAULT_RATE_LIMIT_SKIP_PATHS: readonly string[] = [];

@@ -1,5 +1,11 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
+import userController from '#controllers/api/v1/user.controller';
 
-const userRouter = Router();
+export const createUserRouter = ({ authLimit }: { authLimit: RequestHandler }) => {
+  const userRouter = Router();
 
-export default userRouter;
+  // Credential endpoints get the strict `auth` policy, not just the global one.
+  userRouter.post('/register', authLimit, userController.register);
+
+  return userRouter;
+};

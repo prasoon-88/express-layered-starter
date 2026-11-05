@@ -35,7 +35,7 @@ const HTTP_HEADERS = Object.freeze({
   SET_COOKIE: 'Set-Cookie',
   WWW_AUTHENTICATE: 'WWW-Authenticate',
   ALLOW: 'Allow',
-  RATE_LIMIT_POLICY: 'Ratelimit-Policy',
+  RATE_LIMIT_POLICY: 'RateLimit-Policy',
   RATE_LIMIT: 'RateLimit',
 
   // CORS

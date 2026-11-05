@@ -67,7 +67,7 @@ const server = app.listen(PORT)
 
 registerProcessHandler({
     server,
-    hooks: [],        // cleanup run after the server drains, e.g. () => mongoose.disconnect()
+    hooks: [() => rateLimiter.close()],   // cleanup run after the server drains, e.g. () => mongoose.disconnect()
 })
 ```
 
@@ -188,6 +188,15 @@ Whoever creates a dependency builds its check and passes it to `createApp({ read
 - **`critical` decides the response.** A critical check that is `down` makes `/health/ready` answer `503 SERVICE_UNAVAILABLE`. A non-critical one leaves it at `200` with `status: "degraded"`. Mark a check critical only when the instance cannot do its job without that dependency.
 - **The failure reason is logged, never returned.** The response names each dependency and whether it is `up` or `down`, nothing about why, so a probe cannot leak connection details.
 - **Liveness never runs checks.** Restarting the process cannot fix a dead dependency.
+
+### `redis/`
+
+`createRedisClient(url, logger, { connectTimeoutMs })` in [`redis/index.ts`](redis/index.ts) returns a node-redis client, and `closeRedisClient(client)` shuts it down.
+
+- **Startup never hangs.** node-redis keeps retrying a refused connection forever and its `connect()` promise never settles, so the function stops waiting after `connectTimeoutMs`, logs a warning, and returns the client while it keeps reconnecting in the background. Whoever uses it must handle a client that is not ready yet. The rate limiter does: see [`rateLimiter/`](../rateLimiter/README.md#when-the-store-fails).
+- **Commands fail fast while disconnected** (`disableOfflineQueue`). A request gets an error at once instead of waiting in a queue for a reconnect.
+- **RESP2, on purpose.** node-redis 6 defaults to RESP3, whose `HELLO` handshake Redis older than 6 rejects. Nothing here needs RESP3.
+- **`closeRedisClient` handles both states.** A ready client is closed after its in-flight commands finish. One that never connected, or is between reconnects, has nothing to flush and is destroyed at once, so shutdown never waits on a connection that is not there.
 
 ## Adding a client
 

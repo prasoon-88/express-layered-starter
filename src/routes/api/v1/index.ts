@@ -1,8 +1,10 @@
-import { Router } from 'express';
-import userRouter from './user.routes.ts';
+import { Router, type RequestHandler } from 'express';
+import { createUserRouter } from './user.routes.ts';
 
-const API_V1_ROUTER = Router();
+export const createApiV1Router = (deps: { authLimit: RequestHandler }) => {
+  const router = Router();
 
-API_V1_ROUTER.use('/user', userRouter);
+  router.use('/user', createUserRouter(deps));
 
-export default API_V1_ROUTER;
+  return router;
+};

@@ -1,6 +1,5 @@
-import ENV_CONSTANTS from '#constants/env/index';
 import type { Env } from '#constants/env/schema';
-import { createRedisClient } from '#lib/redis/index';
+import { closeRedisClient, createRedisClient } from '#lib/redis/index';
 import type { Logger } from 'pino';
 import { buildDefaultPolicies, createPolicyRegistry } from './policies.ts';
 import { createRateLimitEngine } from './engine.ts';
@@ -11,11 +10,13 @@ import { createStoreReadinessCheck } from './readiness.ts';
 
 export const initRateLimit = async (env: Env, log: Logger) => {
   const redis =
-    ENV_CONSTANTS.RATE_LIMIT_ENABLED && ENV_CONSTANTS.RATE_LIMIT_STORE === 'redis'
-      ? await createRedisClient(ENV_CONSTANTS.REDIS_URL!, log)
+    env.RATE_LIMIT_ENABLED && env.RATE_LIMIT_STORE === 'redis' && env.REDIS_URL
+      ? await createRedisClient(env.REDIS_URL, log, {
+          connectTimeoutMs: env.REDIS_CONNECT_TIMEOUT_MS,
+        })
       : undefined;
 
-  if (ENV_CONSTANTS.RATE_LIMIT_ENABLED && !redis && env.NODE_ENV === 'production')
+  if (env.RATE_LIMIT_ENABLED && !redis && env.NODE_ENV === 'production')
     log.warn(
       'Rate limiting uses the in-memory store: limits are per instance, not shared across replicas',
     );
@@ -24,36 +25,37 @@ export const initRateLimit = async (env: Env, log: Logger) => {
 
   const engine = createRateLimitEngine({
     policies,
-    prefix: concatenateStrings([ENV_CONSTANTS.SERVICE_NAME, 'rl'], ':'),
-    onStoreError: ENV_CONSTANTS.RATE_LIMIT_ON_STORE_ERROR,
+    prefix: concatenateStrings([env.SERVICE_NAME, 'rl'], ':'),
+    onStoreError: env.RATE_LIMIT_ON_STORE_ERROR,
     log,
+    redis,
   });
 
   const stopSync =
-    redis && ENV_CONSTANTS.RATE_LIMIT_POLICY_REFRESH_S > 0
+    redis && env.RATE_LIMIT_POLICY_REFRESH_S > 0
       ? startPolicySync({
           redis,
           registry: policies,
-          hasKey: concatenateStrings([ENV_CONSTANTS.SERVICE_NAME, 'rl-config'], ':'),
-          intervalS: ENV_CONSTANTS.RATE_LIMIT_POLICY_REFRESH_S,
+          hasKey: concatenateStrings([env.SERVICE_NAME, 'rl-config'], ':'),
+          intervalS: env.RATE_LIMIT_POLICY_REFRESH_S,
           log,
         })
       : undefined;
 
   const limit = createLimit({
-    enabled: ENV_CONSTANTS.RATE_LIMIT_ENABLED,
+    enabled: env.RATE_LIMIT_ENABLED,
     engine,
-    ipv6Subnet: ENV_CONSTANTS.RATE_LIMIT_IPV6_SUBNET,
-    skipPaths: ENV_CONSTANTS.RATE_LIMIT_SKIP_PATHS,
+    ipv6Subnet: env.RATE_LIMIT_IPV6_SUBNET,
+    skipPaths: env.RATE_LIMIT_SKIP_PATHS,
   });
 
   const close = async () => {
     stopSync?.();
-    await redis?.quit();
+    if (redis) await closeRedisClient(redis);
   };
 
   const readinessChecks = redis
-    ? [createStoreReadinessCheck({ redis, onStoreError: ENV_CONSTANTS.RATE_LIMIT_ON_STORE_ERROR })]
+    ? [createStoreReadinessCheck({ redis, onStoreError: env.RATE_LIMIT_ON_STORE_ERROR })]
     : [];
 
   return {

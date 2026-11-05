@@ -1,6 +1,7 @@
 import express from 'express';
 import PATHS from '#constants/path.constant';
 import { createRoutes } from '#routes/index';
+import { createHealthRouter } from '#routes/health/index';
 import { createHealthController } from '#controllers/health/index';
 import type { ReadinessCheck } from '#lib/health/index';
 import notFoundMiddleware from '#middlewares/notFound.middleware';
@@ -27,6 +28,7 @@ export const createApp = ({ env, rl, readinessChecks = [] }: AppConfig) => {
   app.set('trust proxy', env.TRUST_PROXY);
   app.set('view engine', 'ejs');
   app.set('views', PATHS.VIEWS.path);
+  app.locals.appName = env.SERVICE_NAME; // shown in the navbar
 
   // Pre Middlewares
   app.use(securityHeadersMiddleware());
@@ -34,11 +36,14 @@ export const createApp = ({ env, rl, readinessChecks = [] }: AppConfig) => {
   app.use(httpLoggerMiddleware());
   if (env.CORS_ENABLED) app.use(corsMiddleware()); // before auth, rate limiting, and routes
   app.use(express.static(PATHS.PUBLIC.path));
+
+  app.use('/health', createHealthRouter(createHealthController({ checks: readinessChecks })));
+
   app.use(rl.limit('global'));
   app.use(requestTimeoutMiddleware(env.REQUEST_HANDLER_TIMEOUT_MS));
 
   // Routes
-  app.use('/', createRoutes({ health: createHealthController({ checks: readinessChecks }) }));
+  app.use('/', createRoutes({ authLimit: rl.limit('auth') }));
 
   // Post Middlewares
   app.use(notFoundMiddleware);

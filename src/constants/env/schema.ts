@@ -148,6 +148,7 @@ const envSchema = z.preprocess(
         .trim()
         .regex(REGEX.REDIS_URL, 'Expected a redis:// or rediss:// URL')
         .optional(),
+      REDIS_CONNECT_TIMEOUT_MS: wholeNumber({ min: 1, max: MAX_TIMER_MS }).default(5000),
       RATE_LIMIT_ENABLED: bool(true),
       RATE_LIMIT_STORE: z.enum(RATE_LIMIT_STORES).default(DEFAULT_RATE_LIMIT_STORE),
       RATE_LIMIT_ON_STORE_ERROR: z.enum(STORE_ERROR_MODES).default(DEFAULT_STORE_ERROR_MODE),

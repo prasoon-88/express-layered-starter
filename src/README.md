@@ -105,6 +105,7 @@ Note what the controller does *not* do: no status codes picked by hand, no error
 | Is it a fixed value that never changes? | `constants/` |
 | Is it a tiny generic helper (pure function)? | `utils/` |
 | Does it wrap an external system or SDK? | `lib/` |
+| Does it count, throttle or report request volume? | `rateLimiter/` |
 | Is it a page template to display? | `views/` |
 
 ## Dependency rules (what may import what)
@@ -129,6 +130,10 @@ services/    ← uses repository, utils, lib, errors, config
 controllers/ ← uses services, utils, errors, lib (route())
    ↑
 routes/      ← uses controllers + middlewares
+
+rateLimiter/ ← uses constants, config, lib, utils, errors, schemas. Nothing imports it
+               except the entry files: server.ts builds it, app.ts mounts it, and
+               routes receive the handler they need as an argument.
 ```
 
 **Dependencies point downward only.** A lower layer must never import an upper layer (e.g. a service never imports a controller) — that creates circular dependencies and breaks reusability.

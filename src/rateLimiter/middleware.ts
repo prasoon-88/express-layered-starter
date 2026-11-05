@@ -2,11 +2,12 @@ import { concatenateStrings } from '#utils/concateStrings';
 import type { RequestHandler, Request } from 'express';
 import type { RateLimitEngine } from './engine.ts';
 import { UnknownPolicyError } from './errors.ts';
+import { rateLimitHeaders } from './headers.ts';
 import { keys, type KeyFn } from './keys.ts';
 import type { PolicyName } from './policies.ts';
 import type { Policy } from './types.ts';
 import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
-import { TooManyRequestsError } from '#errors';
+import { ServiceUnavailableError, TooManyRequestsError } from '#errors';
 
 type PolicyRef = PolicyName | Policy;
 
@@ -64,18 +65,14 @@ export const createLimit = ({ enabled, engine, skipPaths, ipv6Subnet }: LimitCon
 
       const d = await engine.consume(name, policy, key, cost);
 
-      res.set(HTTP_HEADERS.RATE_LIMIT_POLICY, concatenateStrings([d.limit, 'w=', d.windowS], ';'));
-      res.set(
-        HTTP_HEADERS.RATE_LIMIT,
-        concatenateStrings(
-          [
-            concatenateStrings(['limit', d.limit], '='),
-            concatenateStrings(['remaining', d.remaining], '='),
-            concatenateStrings(['reset', d.resetMs], '='),
-          ],
-          ', ',
-        ),
-      );
+      // No limit was checked, so there is no state to report and nothing to refund.
+      if (d.storeError) {
+        if (!d.allowed)
+          throw new ServiceUnavailableError('Rate limiting is temporarily unavailable');
+        return next();
+      }
+
+      res.set(rateLimitHeaders(d));
 
       if (!d.allowed) {
         res.set(HTTP_HEADERS.RETRY_AFTER, Math.max(1, Math.ceil(d.resetMs / 1000)).toString());

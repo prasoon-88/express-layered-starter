@@ -21,6 +21,8 @@ const ALLOW = {
   controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants'],
   routes: ['controllers', 'middlewares', 'constants', 'config'],
   middlewares: ['errors', 'lib', 'config', 'constants', 'contexts', 'schemas'],
+  // Entry files (server.ts, app.ts) wire it in; no other layer may depend on it.
+  rateLimiter: ['constants', 'config', 'lib', 'utils', 'errors', 'schemas'],
 };
 
 const LAYERS = Object.keys(ALLOW);

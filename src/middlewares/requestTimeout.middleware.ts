@@ -48,7 +48,7 @@ const handleTimeout = (
 
   logger.warn(
     {
-      reqId: req.id,
+      requestId: req.id,
       method: req.method,
       url: req.originalUrl,
       ms,

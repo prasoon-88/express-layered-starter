@@ -14,7 +14,7 @@
     "dev": "node --conditions=app-source --env-file=.env --watch src/server.ts",
     "start": "node --enable-source-maps dist/server.js",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "pnpm run clean && tsc -p tsconfig.build.json",
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/copy-views.js",
     "typecheck": "tsc -p tsconfig.json",
     "typecheck:watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint .",

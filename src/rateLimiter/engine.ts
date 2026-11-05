@@ -67,8 +67,9 @@ export const createRateLimitEngine = (deps: RateLimiterEngineDeps) => {
   ): Promise<Decision> => {
     const limiter = limiterFor(name, p);
     const noRefund = async () => {};
-    const make = (allowed: boolean, res?: RateLimiterRes): Decision => ({
+    const make = (allowed: boolean, res?: RateLimiterRes, storeError = false): Decision => ({
       allowed,
+      storeError,
       limit: p.points,
       remaining: allowed ? (res?.remainingPoints ?? p.points) : 0,
       windowS: p.durationS,
@@ -90,7 +91,7 @@ export const createRateLimitEngine = (deps: RateLimiterEngineDeps) => {
     } catch (rej) {
       if (!(rej instanceof Error)) return make(false, rej as RateLimiterRes); // limit hit
       log.error({ err: rej, policy: name }, 'rate limit store error'); // store failure
-      return make(onStoreError === 'allow');
+      return make(onStoreError === 'allow', undefined, true);
     }
   };
 

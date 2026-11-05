@@ -1,24 +1,32 @@
-import userRepository, { type CreateUserInput } from '#repository/user.repository';
-import { BadRequestError } from '#errors';
+import userRepository from '#repository/user.repository';
+import { hashPassword } from '#utils/password.util';
 
-const REGISTER_REQUIRED_FIELDS = [
-  'fullName',
-  'email',
-  'password',
-] as const satisfies readonly (keyof CreateUserInput)[];
+export interface RegisterUserInput {
+  fullName: string;
+  email: string;
+  password: string;
+}
 
-// Type guard: after this returns true, TypeScript knows `data` is a complete CreateUserInput.
-const hasRequiredFields = (data: Partial<CreateUserInput>): data is CreateUserInput =>
-  REGISTER_REQUIRED_FIELDS.every((field) => Boolean(data[field]));
+export interface RegisteredUser {
+  id: string;
+  fullName: string;
+  email: string;
+}
 
-// Input comes from a request body, so any field may be missing until validated.
-const registerUser = async (data: Partial<CreateUserInput>) => {
-  if (!hasRequiredFields(data)) {
-    const missing = REGISTER_REQUIRED_FIELDS.filter((field) => !data[field]);
-    throw new BadRequestError(`Missing required fields: ${missing.join(', ')}`);
-  }
+// Shape (required, formats, lengths) is the controller's schema. What remains here is the rule:
+// an email can be registered once, which the repository enforces when it saves.
+const registerUser = async ({
+  fullName,
+  email,
+  password,
+}: RegisterUserInput): Promise<RegisteredUser> => {
+  const user = await userRepository.create({
+    fullName,
+    email,
+    passwordHash: await hashPassword(password),
+  });
 
-  await userRepository.create(data);
+  return { id: user.id, fullName: user.fullName, email: user.email };
 };
 
 const userService = {

@@ -1,10 +1,11 @@
-import { Router, json } from 'express';
-import API_V1_ROUTER from './v1/index.ts';
+import { Router, json, type RequestHandler } from 'express';
+import { createApiV1Router } from './v1/index.ts';
 
-const API_ROUTER = Router();
+export const createApiRouter = (deps: { authLimit: RequestHandler }) => {
+  const router = Router();
 
-API_ROUTER.use(json());
+  router.use(json());
+  router.use('/v1', createApiV1Router(deps));
 
-API_ROUTER.use('/v1', API_V1_ROUTER);
-
-export default API_ROUTER;
+  return router;
+};

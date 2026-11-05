@@ -18,6 +18,8 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Validated pagination (parse, clamp, build meta) | [`paginator.util.ts`](src/utils/paginator.util.ts) |
 | Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.ts`](src/server.ts) |
 | Health checks (liveness + readiness) | [`routes/health/`](src/routes/health/) · [`controllers/health/`](src/controllers/health/) |
+| Rate limiting: per-route policies, in-memory or Redis, `RateLimit-*` headers, explicit store-failure modes | [`src/rateLimiter/`](src/rateLimiter/) |
+| A working end-to-end endpoint to copy: `POST /api/v1/user/register` | [`user.controller.ts`](src/controllers/api/v1/user.controller.ts) · [`user.service.ts`](src/services/user.service.ts) |
 | Security headers, static serving, proxy-aware client IPs | [`app.ts`](src/app.ts) (`helmet`, `express.static`, `trust proxy`) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
 
@@ -66,6 +68,10 @@ The environment is validated at boot by the Zod schema in [`src/constants/env/sc
 
 `SHUTDOWN_DELAY_MS` must be smaller than `SHUTDOWN_TIMEOUT_MS`, or the app refuses to start. Set it to `0` locally so Ctrl+C exits at once; see [`src/lib/README.md`](src/lib/README.md#lifecycle) for tuning per platform.
 
+The HTTP timeouts (`LB_IDLE_TIMEOUT_MS`, `HTTP_KEEP_ALIVE_TIMEOUT_MS`, `HTTP_HEADERS_TIMEOUT_MS`, `HTTP_REQUEST_TIMEOUT_MS`, `REQUEST_HANDLER_TIMEOUT_MS`) must keep a fixed order, which the schema checks at boot: handler < load balancer idle < keep-alive < headers (by a 1s margin) <= request. The order is what stops a load balancer from reusing a connection Node has just closed. Each variable's rule is in [`.env.example`](.env.example).
+
+Rate limiting works with no setup: it uses an in-memory store, so limits are per instance. To share limits across replicas set `RATE_LIMIT_STORE=redis` and `REDIS_URL`; `RATE_LIMIT_ON_STORE_ERROR` then decides what happens while Redis is down (`local`, `allow` or `deny`). Startup waits at most `REDIS_CONNECT_TIMEOUT_MS` for Redis, then continues and reconnects in the background. Details, headers and failure modes are in [`src/rateLimiter/README.md`](src/rateLimiter/README.md).
+
 `TRUST_PROXY` sets Express's [`trust proxy`](https://expressjs.com/en/guide/behind-proxies.html), which decides how `req.ip` is read behind a reverse proxy. Its meaning depends on the type: a **number** trusts that many hops (`1` for a single nginx/load balancer), `true`/`false` trust all/none, and a string like `loopback` or a subnet trusts specific addresses. Leave it empty locally (no proxy); set it to the real hop count in production, or a client can forge their IP.
 
 ### Run
@@ -81,9 +87,11 @@ Node strips the types and runs `src/*.ts` as-is, so **dev never type-checks**. Y
 ### Build for production
 
 ```bash
-pnpm build   # type-check + compile src/ -> dist/ (no output at all if any type error)
+pnpm build   # type-check + compile src/ -> dist/, and copy the EJS templates (no output at all if any type error)
 pnpm start   # node dist/server.js
 ```
+
+`dist/` is self-contained next to `public/` and `node_modules/`: it does not read `src/`. CI proves it by deleting `src/` before the smoke test.
 
 ## TypeScript & build
 
@@ -148,6 +156,7 @@ express-layered-starter/
     ├── lib/             # wrappers around external systems (logger, process lifecycle, route())
     ├── middlewares/     # cross-cutting request concerns
     ├── models/          # data shapes / DB schemas
+    ├── rateLimiter/     # request throttling: policies, store, headers (wired in server.ts and app.ts)
     ├── repository/      # database access only
     ├── routes/          # URL → controller mapping
     ├── types/           # project-wide type augmentations (*.d.ts)
@@ -163,7 +172,11 @@ express-layered-starter/
 ```
 HTTP request
    ↓
-requestId  →  httpLogger                 (cross-cutting middleware)
+securityHeaders  →  requestId  →  httpLogger  →  (cors)   (cross-cutting middleware)
+   ↓
+static files,  /health                   (answered here: never rate limited, never timed out)
+   ↓
+rateLimiter  →  requestTimeout           (everything below is limited and time-boxed)
    ↓
 routes/        which URL → which controller
    ↓

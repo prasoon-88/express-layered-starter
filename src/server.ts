@@ -22,5 +22,5 @@ server.listen(ENV_CONSTANTS.PORT, () => {
 
 registerProcessHandler({
   server,
-  rateLimiter,
+  hooks: [() => rateLimiter.close()],
 });

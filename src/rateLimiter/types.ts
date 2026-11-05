@@ -14,6 +14,8 @@ export const decisionDataSchema = z.object({
   remaining: z.number().int(),
   windowS: z.number().int(),
   resetMs: z.number(),
+  // The store could not be reached, so no limit was checked; `allowed` comes from onStoreError.
+  storeError: z.boolean(),
 });
 
 type DecisionData = z.infer<typeof decisionDataSchema>;

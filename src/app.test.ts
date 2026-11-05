@@ -49,13 +49,22 @@ describe('createApp middleware order', () => {
     assert.deepEqual(limited, []);
   });
 
+  it('answers health probes without spending the global rate limit', async () => {
+    limited = [];
+
+    for (const path of ['/health', '/health/live', '/health/ready']) {
+      assert.equal((await fetch(`${baseUrl}${path}`)).status, 200, path);
+    }
+
+    assert.deepEqual(limited, []);
+  });
+
   it('still rate limits application routes', async () => {
     limited = [];
 
-    const response = await fetch(`${baseUrl}/health/live`);
+    await fetch(`${baseUrl}/api/nothing-here`);
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(limited, ['/health/live']);
+    assert.deepEqual(limited, ['/api/nothing-here']);
   });
 
   it('answers an unknown API path with the JSON error envelope and its error code', async () => {
@@ -129,5 +138,79 @@ describe('createApp health endpoints', () => {
     const response = await fetch(`${baseUrl}/health/live`);
 
     assert.equal(response.status, 200);
+  });
+});
+
+describe('POST /api/v1/user/register', () => {
+  let server: Server;
+  let baseUrl = '';
+  const limitedWith: unknown[] = [];
+
+  before(async () => {
+    ({ server, baseUrl } = await listen({
+      rl: {
+        limit: ((policy: unknown) => {
+          limitedWith.push(policy);
+          return passThrough;
+        }) as AppOptions['rl']['limit'],
+      },
+    }));
+  });
+
+  after(() => {
+    server.close();
+  });
+
+  const post = (body: unknown) =>
+    fetch(`${baseUrl}/api/v1/user/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const valid = { fullName: 'Ada Lovelace', email: 'Ada@Example.com', password: 'correct-horse-1' };
+
+  it('creates the user and returns the public fields only', async () => {
+    const response = await post(valid);
+    const body = (await response.json()) as { success: boolean; data: Record<string, unknown> };
+
+    assert.equal(response.status, 201);
+    assert.equal(body.success, true);
+    assert.deepEqual(Object.keys(body.data).sort(), ['email', 'fullName', 'id']);
+    assert.equal(body.data.email, 'ada@example.com', 'the email is normalised');
+    assert.equal(JSON.stringify(body).includes(valid.password), false);
+  });
+
+  it('answers 409 EMAIL_TAKEN for an email that is already registered', async () => {
+    await post({ ...valid, email: 'taken@example.com' });
+
+    const response = await post({ ...valid, email: 'TAKEN@example.com' });
+    const body = (await response.json()) as { code: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(body.code, 'EMAIL_TAKEN');
+  });
+
+  it('answers 400 listing every failing field', async () => {
+    const response = await post({
+      fullName: ' ',
+      email: 'nope@x',
+      password: 'short',
+      extra: 1,
+    });
+    const body = (await response.json()) as { code: string; details: { path: string }[] };
+
+    assert.equal(response.status, 400);
+    assert.equal(body.code, 'BAD_REQUEST');
+    assert.deepEqual(body.details.map((d) => d.path).sort(), [
+      'body.email',
+      'body.extra',
+      'body.fullName',
+      'body.password',
+    ]);
+  });
+
+  it('is covered by the strict auth rate limit policy', () => {
+    assert.ok(limitedWith.includes('auth'));
   });
 });

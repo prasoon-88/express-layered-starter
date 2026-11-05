@@ -42,19 +42,27 @@ jobs:
       - name: Format
         run: pnpm run format:check
 
+      # The rate limiter's integration tests start a throwaway redis-server on a free port.
+      # Without the binary they fail in CI instead of being skipped.
+      - name: Install Redis
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends redis-server
+
       - name: Test
         run: pnpm run test
 
       - name: Build
         run: pnpm run build
 
-      # Compiling is not enough: boot the built app and hit the liveness probe.
+      # Compiling is not enough: boot the built app with src/ gone, the way a production image
+      # runs, so a template or asset that only exists in src/ fails here and not in production.
       - name: Smoke test
         env:
           NODE_ENV: production
           PORT: 8000
         run: |
+          rm -rf src
           pnpm start &
           curl --fail --silent --show-error \
             --retry 20 --retry-delay 1 --retry-connrefused \
             http://localhost:8000/health/live
+          curl --fail --silent --show-error http://localhost:8000/ | grep --quiet "<h1>Home Page</h1>"

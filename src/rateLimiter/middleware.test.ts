@@ -36,8 +36,8 @@ class FakeResponse extends EventEmitter {
   statusCode = 200;
   headers: Record<string, string> = {};
 
-  set(name: string, value: string) {
-    this.headers[name] = value;
+  set(field: string | Record<string, string>, value?: string) {
+    Object.assign(this.headers, typeof field === 'string' ? { [field]: value } : field);
     return this;
   }
 }
@@ -64,6 +64,28 @@ const hit = async (
 };
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+describe('createLimit headers', () => {
+  it('reports the policy and the remaining points, then Retry-After once limited', async () => {
+    const handler = buildLimit()({ policy: { points: 1, durationS: 60 } });
+
+    const first = await hit(handler, '203.0.113.9', 200);
+    assert.deepEqual(first.res.headers, {
+      'RateLimit-Policy': '1;w=60',
+      RateLimit: 'limit=1, remaining=0, reset=60',
+    });
+
+    const res = new FakeResponse();
+    await assert.rejects(async () => {
+      await handler(
+        { method: 'GET', path: '/x', ip: '203.0.113.9' } as unknown as Request,
+        res as unknown as Response,
+        () => {},
+      );
+    }, TooManyRequestsError);
+    assert.equal(res.headers['Retry-After'], '60');
+  });
+});
 
 describe('createLimit refundOnSuccess', () => {
   it('gives the point back after a successful response', async () => {
