@@ -1,16 +1,10 @@
 import type { Response } from 'express';
-import requestContext from '#contexts/requestContext';
 import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { buildSuccessBody } from '#lib/http/successEnvelope.lib';
 import { Paginator, type PaginationInput } from '#utils/paginator.util';
 import { getLogger } from '#lib/logger/index';
 
 const logger = getLogger('apiResponse');
-
-const MESSAGE = {
-  SUCCESS: 'Success',
-  CREATED: 'Created',
-  ACCEPTED: 'Accepted',
-};
 
 const ERROR_MESSAGES = {
   REDIRECT_REQUIRE_URL: 'redirect requires a url',
@@ -31,30 +25,20 @@ const alreadySent = (res: Response) => {
   return true;
 };
 
-const send = (
-  res: Response,
-  status: number,
-  { message = MESSAGE.SUCCESS, data = null, meta, headers }: SendOptions = {},
-) => {
+const send = (res: Response, status: number, { headers, ...body }: SendOptions = {}) => {
   if (alreadySent(res)) return;
   if (headers) res.set(headers);
-  return res.status(status).json({
-    success: true,
-    message,
-    data,
-    ...(meta && { meta }),
-    requestId: requestContext.getRequestId(),
-  });
+  return res.status(status).json(buildSuccessBody(status, body));
 };
 
 const ok = (res: Response, data?: unknown, options?: ResponseOptions) =>
   send(res, HTTP_STATUS.OK, { ...options, data });
 
 const created = (res: Response, data?: unknown, options?: ResponseOptions) =>
-  send(res, HTTP_STATUS.CREATED, { message: MESSAGE.CREATED, ...options, data });
+  send(res, HTTP_STATUS.CREATED, { ...options, data });
 
 const accepted = (res: Response, data?: unknown, options?: ResponseOptions) =>
-  send(res, HTTP_STATUS.ACCEPTED, { message: MESSAGE.ACCEPTED, ...options, data });
+  send(res, HTTP_STATUS.ACCEPTED, { ...options, data });
 
 const noContent = (res: Response, { headers }: Pick<SendOptions, 'headers'> = {}) => {
   if (alreadySent(res)) return;

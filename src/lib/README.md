@@ -169,9 +169,25 @@ It runs in two phases, and the phase an error comes from decides its status:
 - **`z.object` drops unknown keys silently.** Use `z.strictObject` to reject them; each extra key is reported separately (`body.admin`, `Unrecognized field`).
 - **Async rules work.** Parsing uses `safeParseAsync`, so `.refine(async …)` is fine. A refine or transform that *throws*, rather than returning `false`, is a bug and becomes a `500`.
 - **A `ZodError` from inside the handler is a `500`, not a `400`.** Validating a database row or an upstream reply checks *your* data; if it fails, the client did nothing wrong. To reject a request for a business reason, throw a typed error (`BadRequestError`, `UnprocessableEntityError`) from the service.
-- **`response` is an allowlist.** The parsed value is what gets sent, so fields the schema doesn't name (`passwordHash`) are stripped before they leave.
-- **The return value is sent as-is**, not wrapped in the [`apiResponse`](../utils/apiResponse.util.ts) envelope. To use the envelope, call `apiResponse.ok(res, …)` in the handler (it receives `(input, req, res)`); `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
+- **`response` is an allowlist.** It describes `data`. The parsed value is what gets sent, so fields the schema doesn't name (`passwordHash`) are stripped before they leave.
+- **The return value becomes `data` in the standard envelope**, `{ success, message, data, requestId }`, exactly what [`apiResponse`](../utils/apiResponse.util.ts) sends. Both build it with [`successEnvelope.lib.ts`](http/successEnvelope.lib.ts), so a client sees one success shape whichever way the handler responds. The `status` option picks the status code and the default message (`201` → `Created`, `202` → `Accepted`). `204` sends no body, and a handler that returns nothing gets `data: null`.
+- **The handler can still respond itself**, for a redirect or `apiResponse.pagination(res, …)` (the handler receives `(input, req, res)`). `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
 - **Built for JSON routes.** On a non-`/api` route a `400` renders the `error` view, which shows the message but not `details`.
+
+### `health/`
+
+`runReadinessChecks()` in [`health/index.ts`](health/index.ts) is what `GET /health/ready` runs. A dependency describes itself as a `ReadinessCheck`:
+
+```js
+{ name: 'rate-limit-store', critical: false, run: () => redis.ping() }
+```
+
+Whoever creates a dependency builds its check and passes it to `createApp({ readinessChecks })` in [`server.ts`](../server.ts); `app.ts` never learns what the dependencies are. Redis is the first one, built in [`rateLimiter/readiness.ts`](../rateLimiter/readiness.ts).
+
+- **All checks start at once** and each is capped at `READINESS_CHECK_TIMEOUT_MS` (1s, Kubernetes' default probe timeout). A check that rejects, throws, or never answers is `down`; a hung dependency cannot hang the probe.
+- **`critical` decides the response.** A critical check that is `down` makes `/health/ready` answer `503 SERVICE_UNAVAILABLE`. A non-critical one leaves it at `200` with `status: "degraded"`. Mark a check critical only when the instance cannot do its job without that dependency.
+- **The failure reason is logged, never returned.** The response names each dependency and whether it is `up` or `down`, nothing about why, so a probe cannot leak connection details.
+- **Liveness never runs checks.** Restarting the process cannot fix a dead dependency.
 
 ## Adding a client
 

@@ -8,7 +8,11 @@ import { registerProcessHandler } from '#lib/lifecycle/index';
 const logger = getLogger('server');
 export const rateLimiter = await initRateLimit(ENV_CONSTANTS, logger);
 
-const app = createApp({ env: ENV_CONSTANTS, rl: rateLimiter });
+const app = createApp({
+  env: ENV_CONSTANTS,
+  rl: rateLimiter,
+  readinessChecks: rateLimiter.readinessChecks,
+});
 
 const server = createHttpServer({ app, env: ENV_CONSTANTS });
 

@@ -22,6 +22,9 @@ const ERROR_CODES = Object.freeze({
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   TOKEN_INVALID: 'TOKEN_INVALID',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+
+  // Timeout
+  REQUEST_TIMEOUT: 'REQUEST_TIMEOUT',
 });
 
 // Union of every value above ('BAD_REQUEST' | 'UNAUTHORIZED' | ...). A typo becomes a compile error.

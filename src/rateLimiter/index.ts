@@ -7,6 +7,7 @@ import { createRateLimitEngine } from './engine.ts';
 import { concatenateStrings } from '#utils/concateStrings';
 import { startPolicySync } from './policySync.ts';
 import { createLimit } from './middleware.ts';
+import { createStoreReadinessCheck } from './readiness.ts';
 
 export const initRateLimit = async (env: Env, log: Logger) => {
   const redis =
@@ -51,9 +52,14 @@ export const initRateLimit = async (env: Env, log: Logger) => {
     await redis?.quit();
   };
 
+  const readinessChecks = redis
+    ? [createStoreReadinessCheck({ redis, onStoreError: ENV_CONSTANTS.RATE_LIMIT_ON_STORE_ERROR })]
+    : [];
+
   return {
     limit,
     close,
+    readinessChecks,
   };
 };
 

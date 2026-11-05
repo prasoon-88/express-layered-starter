@@ -14,6 +14,14 @@ declare global {
        * `undefined` at runtime, so never read it there.
        */
       user: AuthUser;
+
+      /**
+       * Set by requestTimeout.middleware before any route.
+       * Aborted when the handler budget is exceeded, or when the client disconnects.
+       * Node's `req.signal` stays the platform signal. Cancel downstream work with
+       * `AbortSignal.any([req.signal, req.deadline])`.
+       */
+      deadline: AbortSignal;
     }
 
     interface Locals {

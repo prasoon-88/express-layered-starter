@@ -4,7 +4,7 @@ import type { PolicyName, PolicyRegistry } from './policies.ts';
 import { policySchema, type Policy } from './types.ts';
 
 type StartPolicySyncConfig = {
-  redis: Redis;
+  redis: Pick<Redis, 'hGetAll'>;
   hasKey: string;
   registry: PolicyRegistry;
   intervalS: number;
@@ -46,8 +46,7 @@ export const startPolicySync: StartPolicySync = (o) => {
   };
 
   void sync();
-  // eslint-disable-next-line @typescript-eslint/no-misused-promises
-  const timer = setInterval(sync, o.intervalS);
+  const timer = setInterval(() => void sync(), o.intervalS * 1000);
   timer.unref();
   return () => clearInterval(timer);
 };

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { type Request } from 'express';
 import { ipKeyGenerator } from 'express-rate-limit';
 import { concatenateStrings } from '#utils/concateStrings';
+import type { AuthUser } from '#schemas/user.schema';
 
 export type KeyContext = {
   ipv6Subnet: number;
@@ -17,8 +18,12 @@ const ip: KeyFn<string> = (req, { ipv6Subnet }) =>
     ':',
   );
 
-const user: KeyFn = (req) =>
-  req.user.id ? concatenateStrings(['user', req?.user?.id], ':') : undefined;
+// `req.user` is typed as always present, but it is unset on public routes. Widening it here
+// makes the compiler check that case instead of trusting the declaration.
+const user: KeyFn = (req) => {
+  const authUser: AuthUser | undefined = req.user;
+  return authUser?.id ? concatenateStrings(['user', authUser.id], ':') : undefined;
+};
 
 const header =
   (name: string): KeyFn =>

@@ -1,6 +1,8 @@
 import type { Request, Response, RequestHandler } from 'express';
 import { ZodError, ZodRealError } from 'zod';
 import type { z, ZodType } from 'zod';
+import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { buildSuccessBody } from './successEnvelope.lib.ts';
 
 type Schemas = {
   body?: ZodType;
@@ -55,7 +57,12 @@ export function route<S extends Schemas>(
         if (!parsed.success) throw new Error(`Response schema mismatch: ${parsed.error.message}`);
         out = parsed.data;
       }
-      res.status(opts.status || 200).json(out);
+      const status = opts.status ?? HTTP_STATUS.OK;
+      if (status === HTTP_STATUS.NO_CONTENT) {
+        res.status(status).end(); // a 204 has no body, so there is no envelope to send
+        return;
+      }
+      res.status(status).json(buildSuccessBody(status, { data: out }));
     } catch (err) {
       next(
         err instanceof ZodError

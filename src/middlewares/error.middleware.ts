@@ -33,6 +33,8 @@ const errorHandlerMiddleware: ErrorRequestHandler = (err: unknown, req, res, nex
 
   const source = error.originalError ?? error;
 
+  res.locals.errorCode = error.code; // read by httpLogger for the access log line
+
   const errorJsonResp = {
     success: false,
     code: error.code,

@@ -1,16 +1,18 @@
 import { Router } from 'express';
 import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
-import { healthController } from '#controllers/health/index';
+import type { HealthController } from '#controllers/health/index';
 
-const HEALTH_ROUTER = Router();
+export const createHealthRouter = (healthController: HealthController) => {
+  const healthRouter = Router();
 
-HEALTH_ROUTER.use((req, res, next) => {
-  res.set(HTTP_HEADERS.CACHE_CONTROL, 'no-store');
-  next();
-});
+  healthRouter.use((req, res, next) => {
+    res.set(HTTP_HEADERS.CACHE_CONTROL, 'no-store');
+    next();
+  });
 
-HEALTH_ROUTER.get('/', healthController.ready);
-HEALTH_ROUTER.get('/ready', healthController.ready);
-HEALTH_ROUTER.get('/live', healthController.live);
+  healthRouter.get('/', healthController.ready);
+  healthRouter.get('/ready', healthController.ready);
+  healthRouter.get('/live', healthController.live);
 
-export default HEALTH_ROUTER;
+  return healthRouter;
+};

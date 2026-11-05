@@ -3,6 +3,7 @@ import {
   CORS_DEFAULT_EXPOSED_HEADERS,
 } from '#constants/http/httpHeaders.constant';
 import { DEFAULT_CORS_METHODS, HTTP_METHODS } from '#constants/http/methods.constant';
+import { HTTP_KEEP_ALIVE_TIMEOUT_BUFFER_MS } from '#constants/http/server.constant';
 import {
   DEFAULT_RATE_LIMIT_AUTH_BLOCK_S,
   DEFAULT_RATE_LIMIT_AUTH_MAX,
@@ -162,11 +163,11 @@ const envSchema = z.preprocess(
       RATE_LIMIT_SKIP_PATHS: list
         .pipe(z.array(z.string().startsWith('/', 'Each path must start with "/"')))
         .default([...DEFAULT_RATE_LIMIT_SKIP_PATHS]),
-      LB_IDLE_TIMEOUT_MS: wholeNumber().default(60),
-      HTTP_KEEP_ALIVE_TIMEOUT_MS: wholeNumber().default(65),
-      HTTP_HEADERS_TIMEOUT_MS: wholeNumber().default(66),
-      HTTP_REQUEST_TIMEOUT_MS: wholeNumber().default(120),
-      REQUEST_TIMEOUT_MS: wholeNumber().default(30),
+      LB_IDLE_TIMEOUT_MS: wholeNumber().default(60_000),
+      HTTP_KEEP_ALIVE_TIMEOUT_MS: wholeNumber().default(65_000),
+      HTTP_HEADERS_TIMEOUT_MS: wholeNumber().default(67_000),
+      HTTP_REQUEST_TIMEOUT_MS: wholeNumber().default(120_000),
+      REQUEST_HANDLER_TIMEOUT_MS: wholeNumber({ max: MAX_TIMER_MS }).default(30_000),
     })
     .superRefine((e, ctx) => {
       const addIssue = (path: string[], message: string) =>
@@ -214,10 +215,40 @@ const envSchema = z.preprocess(
           'must exceed LB_IDLE_TIMEOUT_MS ( LB_IDLE_TIMEOUT_MS < HTTP_KEEP_ALIVE_TIMEOUT_MS )',
         );
 
-      if (e.HTTP_HEADERS_TIMEOUT_MS > e.HTTP_REQUEST_TIMEOUT_MS)
+      // Node closes an idle keep-alive socket at keepAlive + buffer. A headers timeout that fires
+      // at the same moment can answer a reused connection with a 408, so it must come later.
+      // 0 disables a timer in Node, so a disabled timer takes no part in these comparisons.
+      if (
+        e.HTTP_KEEP_ALIVE_TIMEOUT_MS > 0 &&
+        e.HTTP_HEADERS_TIMEOUT_MS > 0 &&
+        e.HTTP_HEADERS_TIMEOUT_MS <=
+          e.HTTP_KEEP_ALIVE_TIMEOUT_MS + HTTP_KEEP_ALIVE_TIMEOUT_BUFFER_MS
+      )
+        addIssue(
+          ['HTTP_HEADERS_TIMEOUT_MS'],
+          'must exceed HTTP_KEEP_ALIVE_TIMEOUT_MS + 1000 ( HTTP_KEEP_ALIVE_TIMEOUT_MS + 1000 < HTTP_HEADERS_TIMEOUT_MS )',
+        );
+
+      // Node refuses to start when requestTimeout is smaller than headersTimeout.
+      if (
+        e.HTTP_HEADERS_TIMEOUT_MS > 0 &&
+        e.HTTP_REQUEST_TIMEOUT_MS > 0 &&
+        e.HTTP_HEADERS_TIMEOUT_MS > e.HTTP_REQUEST_TIMEOUT_MS
+      )
         addIssue(
           ['HTTP_REQUEST_TIMEOUT_MS'],
-          'must exceed HTTP_HEADERS_TIMEOUT_MS ( HTTP_HEADERS_TIMEOUT_MS < HTTP_REQUEST_TIMEOUT_MS )',
+          'must be at least HTTP_HEADERS_TIMEOUT_MS ( HTTP_HEADERS_TIMEOUT_MS <= HTTP_REQUEST_TIMEOUT_MS )',
+        );
+
+      // Past the load balancer's idle timeout the client sees the balancer's 504, never our 408.
+      if (
+        e.LB_IDLE_TIMEOUT_MS > 0 &&
+        e.REQUEST_HANDLER_TIMEOUT_MS > 0 &&
+        e.REQUEST_HANDLER_TIMEOUT_MS >= e.LB_IDLE_TIMEOUT_MS
+      )
+        addIssue(
+          ['REQUEST_HANDLER_TIMEOUT_MS'],
+          'must be less than LB_IDLE_TIMEOUT_MS ( REQUEST_HANDLER_TIMEOUT_MS < LB_IDLE_TIMEOUT_MS )',
         );
     })
     .transform(({ npm_package_name, ...e }) => ({

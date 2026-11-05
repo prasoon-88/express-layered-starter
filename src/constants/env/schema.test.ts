@@ -26,6 +26,22 @@ describe('parseEnv', () => {
         CORS_ALLOWED_HEADERS: ['Content-Type', 'Authorization'],
         CORS_EXPOSED_HEADERS: ['X-Request-Id'],
         CORS_MAX_AGE_S: 600,
+        RATE_LIMIT_ENABLED: true,
+        RATE_LIMIT_STORE: 'memory',
+        RATE_LIMIT_ON_STORE_ERROR: 'local',
+        RATE_LIMIT_WINDOW_S: 60,
+        RATE_LIMIT_MAX: 100,
+        RATE_LIMIT_AUTH_WINDOW_S: 900,
+        RATE_LIMIT_AUTH_MAX: 10,
+        RATE_LIMIT_AUTH_BLOCK_S: 900,
+        RATE_LIMIT_IPV6_SUBNET: 56,
+        RATE_LIMIT_POLICY_REFRESH_S: 30,
+        RATE_LIMIT_SKIP_PATHS: ['/health', '/health/live', '/health/ready'],
+        LB_IDLE_TIMEOUT_MS: 60_000,
+        HTTP_KEEP_ALIVE_TIMEOUT_MS: 65_000,
+        HTTP_HEADERS_TIMEOUT_MS: 67_000,
+        HTTP_REQUEST_TIMEOUT_MS: 120_000,
+        REQUEST_HANDLER_TIMEOUT_MS: 30_000,
         EXPOSE_ERROR_STACK: false,
       });
     });
@@ -123,6 +139,68 @@ describe('parseEnv', () => {
         assert.throws(() => parse({ TRUST_PROXY }), /TRUST_PROXY/);
       });
     }
+  });
+
+  describe('handler timeout', () => {
+    it('must finish before the load balancer gives up on the connection', () => {
+      // LB_IDLE_TIMEOUT_MS defaults to 60_000: past that the client sees the LB's 504, not our 408.
+      assert.throws(
+        () => parse({ REQUEST_HANDLER_TIMEOUT_MS: '60000' }),
+        /REQUEST_HANDLER_TIMEOUT_MS/,
+      );
+      assert.equal(
+        parse({ REQUEST_HANDLER_TIMEOUT_MS: '59999' }).REQUEST_HANDLER_TIMEOUT_MS,
+        59999,
+      );
+    });
+
+    it('is not compared with the load balancer when that timeout is unset (0)', () => {
+      const env = parse({
+        LB_IDLE_TIMEOUT_MS: '0',
+        REQUEST_HANDLER_TIMEOUT_MS: '300000',
+        HTTP_REQUEST_TIMEOUT_MS: '600000',
+      });
+      assert.equal(env.REQUEST_HANDLER_TIMEOUT_MS, 300000);
+    });
+
+    it('accepts 0 as disabled', () => {
+      assert.equal(parse({ REQUEST_HANDLER_TIMEOUT_MS: '0' }).REQUEST_HANDLER_TIMEOUT_MS, 0);
+    });
+
+    it('rejects a timeout larger than setTimeout can hold', () => {
+      assert.throws(
+        () => parse({ REQUEST_HANDLER_TIMEOUT_MS: '3000000000' }),
+        /REQUEST_HANDLER_TIMEOUT_MS/,
+      );
+    });
+  });
+
+  describe('socket timers', () => {
+    it("requires HTTP_HEADERS_TIMEOUT_MS to exceed HTTP_KEEP_ALIVE_TIMEOUT_MS plus Node's 1s keep-alive buffer", () => {
+      // Node closes an idle keep-alive socket at keepAlive + 1000ms. A headers timeout that fires
+      // at the same moment can answer a reused connection with a 408.
+      assert.throws(
+        () => parse({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '65000', HTTP_HEADERS_TIMEOUT_MS: '66000' }),
+        /HTTP_HEADERS_TIMEOUT_MS/,
+      );
+      assert.equal(
+        parse({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '65000', HTTP_HEADERS_TIMEOUT_MS: '66001' })
+          .HTTP_HEADERS_TIMEOUT_MS,
+        66001,
+      );
+    });
+
+    it('requires HTTP_REQUEST_TIMEOUT_MS to be at least HTTP_HEADERS_TIMEOUT_MS', () => {
+      assert.throws(() => parse({ HTTP_REQUEST_TIMEOUT_MS: '50000' }), /HTTP_REQUEST_TIMEOUT_MS/);
+    });
+
+    it('lets HTTP_REQUEST_TIMEOUT_MS=0 disable the request timeout, as Node does', () => {
+      assert.equal(parse({ HTTP_REQUEST_TIMEOUT_MS: '0' }).HTTP_REQUEST_TIMEOUT_MS, 0);
+    });
+
+    it('lets HTTP_HEADERS_TIMEOUT_MS=0 disable the headers timeout, as Node does', () => {
+      assert.equal(parse({ HTTP_HEADERS_TIMEOUT_MS: '0' }).HTTP_HEADERS_TIMEOUT_MS, 0);
+    });
   });
 
   describe('shutdown timers', () => {

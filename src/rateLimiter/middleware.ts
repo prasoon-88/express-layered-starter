@@ -84,7 +84,7 @@ export const createLimit = ({ enabled, engine, skipPaths, ipv6Subnet }: LimitCon
 
       if (opts.refundOnSuccess) {
         res.on('finish', () => {
-          if (req?.statusCode && req.statusCode < 400) {
+          if (res.statusCode < 400) {
             void d.refund();
           }
         });

@@ -28,7 +28,7 @@ Every class extends `AppError`, which fixes the shape:
 
 `isOperational` is the important one. Anything that reaches the handler *without* it is treated as an unexpected crash: logged with its original stack, reported as a generic 500, and its message never sent to the client. The one exception is local debugging: with `NODE_ENV=development` set explicitly, every error response also carries the original `stack`. Any other value, including an unset `NODE_ENV`, leaves it out.
 
-Available: `BadRequestError` · `UnauthorizedError` · `ForbiddenError` · `NotFoundError` · `ConflictError` · `UnprocessableEntityError` · `TooManyRequestsError` · `InternalServerError` · `ServiceUnavailableError`
+Available: `BadRequestError` · `UnauthorizedError` · `ForbiddenError` · `NotFoundError` · `ConflictError` · `UnprocessableEntityError` · `TooManyRequestsError` · `RequestTimeoutError` · `InternalServerError` · `ServiceUnavailableError`
 
 ## Example
 

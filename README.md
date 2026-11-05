@@ -217,7 +217,7 @@ The handler normalizes anything thrown — including framework errors from JWT o
 
 ## Request validation
 
-Wrap a controller in [`route()`](src/lib/http/route.lib.ts) and give it Zod schemas. The handler receives parsed, typed input, and whatever it returns is sent as JSON:
+Wrap a controller in [`route()`](src/lib/http/route.lib.ts) and give it Zod schemas. The handler receives parsed, typed input, and whatever it returns is sent as `data` in the same envelope `apiResponse` uses (see [Responses](#responses)):
 
 ```js
 import { z } from 'zod'
@@ -257,7 +257,7 @@ apiResponse.created(res, user, { message: 'User registered' })
 apiResponse.pagination(res, items, { total, page, pageSize })
 ```
 
-Every response carries the same envelope:
+Every success response carries the same envelope, whether a handler calls `apiResponse` or returns a value from `route()`:
 
 ```json
 { "success": true, "message": "Success", "data": {}, "requestId": "3f2b…" }
@@ -270,8 +270,8 @@ Two endpoints the platform polls, plus a plain alias:
 | Route | Question it answers | Running | Draining (after SIGTERM/SIGINT) |
 |-------|---------------------|:---:|:---:|
 | `GET /health/live` | Is the process alive? | `200` | **`200`** |
-| `GET /health/ready` | Should it receive traffic? | `200` | **`503`** |
-| `GET /health` | alias for `/ready` | `200` | `503` |
+| `GET /health/ready` | Should it receive traffic? | `200`, or `503` if a critical dependency is down | **`503`** |
+| `GET /health` | alias for `/ready` | same as `/ready` | `503` |
 
 They live in [`routes/health/`](src/routes/health/) and [`controllers/health/`](src/controllers/health/), mounted **first** in [`routes/index.ts`](src/routes/index.ts) and already in the logger's ignore list, so probes never clutter the access log.
 
@@ -280,7 +280,7 @@ They live in [`routes/health/`](src/routes/health/) and [`controllers/health/`](
 Liveness and readiness fail for different reasons and the platform reacts differently to each:
 
 - **Liveness failing → restart the process.** So it checks only things a restart could fix, and stays `200` even while shutting down. If it returned `503` during a drain, the platform could kill the process mid-shutdown and cut in-flight requests. (This is also why a database check must *never* go in liveness — an outage would restart every instance in a loop that can't fix anything.)
-- **Readiness failing → stop sending traffic, but leave the process running.** It returns `503` the moment [`lifecycleState.isShuttingDown()`](src/lib/lifecycle/state.ts) flips. Combined with the drain delay (see [`src/lib/README.md`](src/lib/README.md#lifecycle)), this is what lets a rolling deploy move traffic off an instance before it closes — zero dropped requests. Later, a database or dependency check goes **here**.
+- **Readiness failing → stop sending traffic, but leave the process running.** It returns `503` the moment [`lifecycleState.isShuttingDown()`](src/lib/lifecycle/state.ts) flips. Combined with the drain delay (see [`src/lib/README.md`](src/lib/README.md#lifecycle)), this is what lets a rolling deploy move traffic off an instance before it closes — zero dropped requests. Dependency checks go **here** too: when Redis backs the rate limiter, `/health/ready` pings it. The body lists each dependency as `up` or `down` (never why), and whether a `down` one returns `503` depends on how critical it is. With `RATE_LIMIT_ON_STORE_ERROR=deny` a dead Redis returns `503`; with `local` or `allow` the app keeps serving through the outage, so it stays `200` and reports `status: "degraded"` rather than pulling every instance out of rotation. See [`src/lib/README.md`](src/lib/README.md#health).
 
 ### Design notes
 

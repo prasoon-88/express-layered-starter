@@ -6,5 +6,6 @@ export { default as NotFoundError } from './notFound.error.ts';
 export { default as ConflictError } from './conflict.error.ts';
 export { default as UnprocessableEntityError } from './unprocessableEntity.error.ts';
 export { default as TooManyRequestsError } from './tooManyRequests.error.ts';
+export { default as RequestTimeoutError } from './requestTimeout.error.ts';
 export { default as InternalServerError } from './internalServer.error.ts';
 export { default as ServiceUnavailableError } from './serviceUnavailable.error.ts';
