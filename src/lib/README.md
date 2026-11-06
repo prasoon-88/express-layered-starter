@@ -174,6 +174,15 @@ It runs in two phases, and the phase an error comes from decides its status:
 - **The handler can still respond itself**, for a redirect or `apiResponse.pagination(res, …)` (the handler receives `(input, req, res)`). `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
 - **Built for JSON routes.** On a non-`/api` route a `400` renders the `error` view, which shows the message but not `details`.
 
+### `auth/`
+
+`createAccessTokens({ secret, issuer, audience, ttlS, now? })` in [`auth/accessToken.ts`](auth/accessToken.ts) returns `{ sign, verify }`, the only code that touches `jsonwebtoken`. The auth module builds it from `JWT_SECRET`, `SERVICE_NAME` and `JWT_ACCESS_TTL_S`.
+
+- **`sign({ sub, email, role })`** returns `{ token, expiresIn }`. `iat` comes from `now`, so tests move the clock instead of waiting.
+- **`verify(token)`** pins HS256, the issuer and the audience, with 5 seconds of clock tolerance. It throws jsonwebtoken's own errors, which the [JWT converter](../errors/converter/jwt.converter.ts) turns into `401 TOKEN_EXPIRED` or `TOKEN_INVALID`.
+- **It checks the signature, not the shape.** `lib/` may not import `schemas/`, so the [authenticate middleware](../middlewares/authenticate.middleware.ts) validates the claims with `authUserSchema`.
+- **It refuses a weak setup at construction**: a secret under 32 characters, or a ttl that is not a positive whole number, throws a `RangeError`.
+
 ### `health/`
 
 `runReadinessChecks()` in [`health/index.ts`](health/index.ts) is what `GET /health/ready` runs. A dependency describes itself as a `ReadinessCheck`:

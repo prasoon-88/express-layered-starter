@@ -20,6 +20,9 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.ts`](src/server.ts) |
 | Health checks (liveness + readiness) | [`routes/health/`](src/routes/health/) · [`controllers/health/`](src/controllers/health/) |
 | Rate limiting: per-route policies, in-memory or Redis, `RateLimit-*` headers, explicit store-failure modes | [`src/rateLimiter/`](src/rateLimiter/) |
+| Idempotency: `Idempotency-Key` replay of a completed `POST`/`PATCH`, conflict and reuse detection, in-memory or Redis | [`src/idempotency/`](src/idempotency/) |
+| CORS, off by default; origins, credentials, methods and headers validated at boot | [`cors.middleware.ts`](src/middlewares/cors.middleware.ts) · [`cors.config.ts`](src/config/cors.config.ts) |
+| Auth: login, short-lived JWT access tokens, rotating refresh tokens with reuse detection, logout | [Authentication](#authentication) · [`auth.service.ts`](src/services/auth.service.ts) · [`authenticate.middleware.ts`](src/middlewares/authenticate.middleware.ts) |
 | A working end-to-end endpoint to copy: `POST /api/v1/user/register` | [`user.controller.ts`](src/controllers/api/v1/user.controller.ts) · [`user.service.ts`](src/services/user.service.ts) |
 | Security headers, static serving, proxy-aware client IPs | [`app.ts`](src/app.ts) (`helmet`, `express.static`, `trust proxy`) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
@@ -32,7 +35,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | [pino](https://getpino.io/) | Structured JSON logging (`pino-pretty` in dev) |
 | [Zod 4](https://zod.dev/) | Request and response validation through [`route()`](src/lib/http/route.lib.ts) |
 | [EJS](https://ejs.co/) | Server-side rendered views |
-| [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | JWT — error converter wired, auth not yet built |
+| [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | Access tokens (HS256), wrapped in [`lib/auth/accessToken.ts`](src/lib/auth/accessToken.ts) |
 | [helmet](https://helmetjs.github.io/) | Security headers, mounted on every response |
 | [TypeScript 6](https://www.typescriptlang.org/) | Strict type-checking; `tsc` compiles `src/` → `dist/` |
 | [typescript-eslint](https://typescript-eslint.io/) | Type-aware lint rules (floating promises, unsafe `any`, …) |
@@ -65,6 +68,7 @@ cp .env.example .env
 The environment is validated at boot by the Zod schema in [`src/constants/env/schema.ts`](src/constants/env/schema.ts). A missing or malformed value stops the app with a message naming the variable (the value itself is never printed).
 
 - **`NODE_ENV` is required** (`development` | `test` | `production`). There is no default on purpose: a deploy that forgets it must fail, not silently run as `development` and send stack traces to clients.
+- **`JWT_SECRET` is required in production** (at least 32 characters). Elsewhere a missing one is generated per process, so `pnpm dev` works out of the box, but every token stops working when the process restarts. Set it in `.env` to stay signed in across restarts.
 - Every other variable has a default, and an empty value (`KEY=`) counts as unset.
 
 `SHUTDOWN_DELAY_MS` must be smaller than `SHUTDOWN_TIMEOUT_MS`, or the app refuses to start. Set it to `0` locally so Ctrl+C exits at once; see [`src/lib/README.md`](src/lib/README.md#lifecycle) for tuning per platform.
@@ -280,6 +284,43 @@ Every success response carries the same envelope, whether a handler calls `apiRe
 { "success": true, "message": "Success", "data": {}, "requestId": "3f2b…" }
 ```
 
+## Authentication
+
+Two tokens, because one token cannot be both cheap to check and revocable:
+
+| | Access token | Refresh token |
+|---|---|---|
+| Form | JWT, HS256, signed with `JWT_SECRET` | opaque `<id>.<secret>`; only a sha256 of the secret is stored |
+| Lifetime | `JWT_ACCESS_TTL_S`, 15 minutes | `JWT_REFRESH_TTL_S`, 30 days, renewed on each refresh |
+| Sent as | `Authorization: Bearer <token>` | JSON body of `/auth/refresh` and `/auth/logout` |
+| Checked by | signature and claims only, no store lookup | the refresh token store |
+| Revocable | no: it simply expires | yes |
+
+| Endpoint | Access | Body | Answer |
+|----------|--------|------|--------|
+| `POST /api/v1/user/register` | public | `fullName`, `email`, `password` | `201`, the new user (role `NORMAL`) |
+| `POST /api/v1/auth/login` | public | `email`, `password` | `200` `{ accessToken, refreshToken, tokenType: "Bearer", expiresIn }` |
+| `POST /api/v1/auth/refresh` | public: the body is the credential | `refreshToken` | `200`, a new pair; the old refresh token stops working |
+| `POST /api/v1/auth/logout` | public: the body is the credential | `refreshToken` | `204`, always |
+| `GET /api/v1/user/me` | `authenticated` | — | `200` `{ id, fullName, email, role }` |
+
+How a client uses it: log in, send the access token on every call, and on a `401` with `TOKEN_EXPIRED` call refresh once and retry. When refresh fails, send the user to log in.
+
+**Behaviors worth knowing**
+
+- **Refresh tokens rotate, and a reused one revokes the login.** Each refresh token works once. If an old one comes back, two parties hold it (a stolen copy, or a client that lost the response), and the server cannot tell which is the owner. So every token from that login stops working, a warning is logged, and both parties have to log in again. Two simultaneous refreshes with the same token count as reuse too, so a client should send one refresh at a time.
+- **Each login is its own family.** Logging out on the phone leaves the laptop signed in.
+- **Refresh reads the user again**, so a changed role or a deleted account takes effect at the next refresh, within `JWT_ACCESS_TTL_S`. Until then an issued access token stays valid; that window is the price of not checking a store on every request.
+- **A wrong password and an unknown email answer the same** (`401 INVALID_CREDENTIALS`), and both cost one scrypt hash, so neither the message nor the timing tells an attacker which emails are registered.
+- **Logout always answers `204`**, whether the token was valid, already revoked, or garbage. A token with a known id but the wrong secret changes nothing, so nobody can log another person out by guessing an id.
+- **Verification is pinned**: algorithm HS256, issuer and audience both `SERVICE_NAME`, 5 seconds of clock tolerance. A token signed with `alg: none`, another HMAC algorithm, another secret or for another service is refused. Change `SERVICE_NAME` and every issued token is refused.
+- **A `401` says why** in `WWW-Authenticate` ([RFC 6750](https://www.rfc-editor.org/rfc/rfc6750)): `Bearer` when no token was sent, `Bearer error="invalid_token"` when one was refused. The body's `code` is `UNAUTHORIZED`, `TOKEN_INVALID` or `TOKEN_EXPIRED`.
+- **Token responses are never cached** (`Cache-Control: no-store`), and they skip idempotency on purpose: a replay would hand the same tokens out again, and the idempotency store would keep live credentials.
+- **Only failures count against the `auth` rate limit** on login, refresh and logout (`refundOnSuccess`). A client refreshing every 15 minutes never hits it; a password-guessing loop does.
+- **Refresh tokens live in memory** until a database branch replaces [`refreshToken.repository.ts`](src/repository/refreshToken.repository.ts), like users. A restart signs everyone out, and replicas do not share them. The repository comment gives the SQL shape the four calls take.
+
+Protect a route by choosing its access strategy; see [`src/http/README.md`](src/http/README.md#access-rules). The handler then reads `req.user` (`{ id, email, role }`).
+
 ## Health checks
 
 Two endpoints the platform polls, plus a plain alias:
@@ -340,11 +381,12 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] JSON body parsing on `/api`
 - [x] Form body parsing (`express.urlencoded`) and static file serving
 - [x] Security headers (`helmet`), static assets, and `trust proxy`
-- [ ] CORS (when a cross-origin client needs it)
+- [x] CORS, off until `CORS_ENABLED=true`
+- [x] Idempotency keys for retried writes
 - [x] Env validation (zod) — reject malformed values at boot
 - [x] Input validation at the controller boundary (`route()` + Zod)
 - [x] Required access rule on every route (`public` / `authenticated` / `roles`), `authorize` middleware
-- [ ] Auth: register / login with JWT (register `authenticate` in `app.ts`; see [`src/http/README.md`](src/http/README.md#access-rules))
+- [x] Auth: register, login, JWT access tokens, rotating refresh tokens with reuse detection, logout, `GET /api/v1/user/me`
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
-- [ ] Tests — env schema covered; HTTP tests (`supertest`) next
+- [x] Tests: unit tests plus real HTTP tests against a listening app (Node's test runner and `fetch`, no extra framework); Redis integration tests in CI

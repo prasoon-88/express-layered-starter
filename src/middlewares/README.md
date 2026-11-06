@@ -48,25 +48,22 @@ Mounted with `app.use(requestIdMiddleware())` — note the call. Middleware with
 |------|------|
 | `requestId.middleware.ts` | Reuses a valid inbound `X-Request-Id` or generates one; sets `req.id`, echoes the header, opens the async context |
 | `httpLogger.middleware.ts` | One access log line per request with method, path, status, duration, IP; warns on slow or aborted requests; skips configured paths |
+| `authenticate.middleware.ts` | `createAuthenticate({ accessTokens })`: verifies `Authorization: Bearer <jwt>`, validates the claims with `authUserSchema`, sets `req.user`. A `401` carries `WWW-Authenticate`. The auth module provides it; the `authenticated` and `roles` strategies run it |
 | `authorize.middleware.ts` | `authorize(roles)`: `403` unless `req.user.role` is listed, `401` if nobody was authenticated. The `roles` access strategy puts it after `authenticate` |
+| `noStore.middleware.ts` | `Cache-Control: no-store`, for health probes and token responses |
 | `notFound.middleware.ts` | Converts an unmatched route into a `NotFoundError` |
 | `error.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
 
 ## Writing one
 
-```js
-const requireAuth = () => (req, res, next) => {
-    const token = req.get('authorization')?.replace('Bearer ', '')
-    if (!token) return next(new UnauthorizedError('Missing token'))
-
-    try {
-        req.user = verifyToken(token)
-        next()
-    } catch (err) {
-        next(err)        // let the converter turn JWT errors into ours
-    }
+```ts
+export const requireHeader = (name: string): RequestHandler => (req, _res, next) => {
+    if (!req.get(name)) return next(new BadRequestError(`Missing ${name} header`))
+    next()
 }
 ```
+
+[`authenticate.middleware.ts`](authenticate.middleware.ts) is a complete real one: it takes its dependency as an argument, refuses with typed errors, and hands errors it did not create to `next(err)` so a converter turns them into ours.
 
 Three rules: always call `next()` or send a response (never neither, or the request hangs); pass errors to `next(err)` rather than responding yourself; never swallow an error silently.
 

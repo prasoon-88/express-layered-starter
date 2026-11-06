@@ -28,6 +28,12 @@ import {
   STORE_ERROR_MODES,
 } from '#constants/rateLimit.constants';
 import REGEX from '#constants/regex.constant';
+import {
+  DEFAULT_JWT_ACCESS_TTL_S,
+  DEFAULT_JWT_REFRESH_TTL_S,
+  JWT_SECRET_MIN_LENGTH,
+} from '#constants/auth.constant';
+import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { LevelWithSilent } from 'pino';
 import * as z from 'zod';
@@ -183,6 +189,12 @@ const envSchema = z.preprocess(
       IDEMPOTENCY_MAX_BODY_BYTES: wholeNumber({ min: 1 }).default(
         DEFAULT_IDEMPOTENCY_MAX_BODY_BYTES,
       ),
+      JWT_SECRET: z
+        .string()
+        .min(JWT_SECRET_MIN_LENGTH, `Must be at least ${JWT_SECRET_MIN_LENGTH} characters`)
+        .optional(),
+      JWT_ACCESS_TTL_S: wholeNumber({ min: 1 }).default(DEFAULT_JWT_ACCESS_TTL_S),
+      JWT_REFRESH_TTL_S: wholeNumber({ min: 1 }).default(DEFAULT_JWT_REFRESH_TTL_S),
       LB_IDLE_TIMEOUT_MS: wholeNumber().default(60_000),
       HTTP_KEEP_ALIVE_TIMEOUT_MS: wholeNumber().default(65_000),
       HTTP_HEADERS_TIMEOUT_MS: wholeNumber().default(67_000),
@@ -205,7 +217,19 @@ const envSchema = z.preprocess(
 
         if (e.TRUST_PROXY === true)
           addIssue(['TRUST_PROXY'], 'Use a hop count or CIDR in production');
+
+        if (!e.JWT_SECRET)
+          addIssue(
+            ['JWT_SECRET'],
+            "Required in production. Generate one with: node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
+          );
       }
+
+      if (e.JWT_REFRESH_TTL_S <= e.JWT_ACCESS_TTL_S)
+        addIssue(
+          ['JWT_REFRESH_TTL_S'],
+          'must be greater than JWT_ACCESS_TTL_S ( JWT_ACCESS_TTL_S < JWT_REFRESH_TTL_S )',
+        );
 
       if (e.CORS_ENABLED) {
         if (!e.CORS_ORIGINS.length) addIssue(['CORS_ORIGINS'], 'Required when CORS_ENABLED=true');
@@ -287,6 +311,9 @@ const envSchema = z.preprocess(
     .transform(({ npm_package_name, ...e }) => ({
       ...e,
       SERVICE_NAME: e.SERVICE_NAME ?? npm_package_name ?? 'app',
+      // Outside production a missing secret is generated per process: tokens then stop working
+      // when the process restarts. Set JWT_SECRET in .env to keep them across restarts.
+      JWT_SECRET: e.JWT_SECRET ?? randomBytes(48).toString('base64url'),
       EXPOSE_ERROR_STACK: e.NODE_ENV === 'development',
     })),
 );

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { route } from '#lib/http/route.lib';
 import REGEX from '#constants/regex.constant';
 import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { USER_ROLES } from '#constants/user.constant';
 import type { UserService } from '#services/user.service';
 
 // Endpoint-only schemas: they stay here until a second file needs them.
@@ -19,8 +20,10 @@ const registeredUser = z.object({
   email: z.email(),
 });
 
+const profile = registeredUser.extend({ role: z.enum(USER_ROLES) });
+
 type UserControllerDeps = {
-  userService: Pick<UserService, 'registerUser'>;
+  userService: Pick<UserService, 'registerUser' | 'getProfile'>;
 };
 
 export const createUserController = ({ userService }: UserControllerDeps) => {
@@ -30,7 +33,10 @@ export const createUserController = ({ userService }: UserControllerDeps) => {
     { status: HTTP_STATUS.CREATED },
   );
 
-  return { register };
+  // Mounted behind `authenticated`, so req.user is set.
+  const me = route({ response: profile }, (_input, req) => userService.getProfile(req.user.id));
+
+  return { register, me };
 };
 
 export type UserController = ReturnType<typeof createUserController>;

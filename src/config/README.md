@@ -5,7 +5,6 @@
 ## What goes here
 - Server settings: `PORT`, `BASE_URL`, `NODE_ENV`
 - Database config: connection URL, name, options
-- Auth config: JWT secret (from env), token expiry, salt rounds
 - Third-party service config: mail, storage, payment
 - Defaults for env vars (`process.env.PORT || 3000`)
 
@@ -29,17 +28,19 @@ Note the extra step: **`constants/env/` is the only place in the app that reads 
 
 ## Example
 ```js
-// config/auth.config.ts
+// config/mailer.config.ts
 import ENV_CONSTANTS from '#constants/env/index'
 
-export const authConfig = Object.freeze({
-    jwtSecret: ENV_CONSTANTS.JWT_SECRET,      // from .env, never hardcoded
-    jwtExpiresIn: '7d',
-    saltRounds: 10,
+export const mailerConfig = Object.freeze({
+    host: ENV_CONSTANTS.SMTP_HOST,
+    password: ENV_CONSTANTS.SMTP_PASSWORD,    // from .env, never hardcoded
+    from: 'no-reply@example.com',
 })
 ```
 
-The convention here: one file per concern (`logger.config.ts`, `auth.config.ts`), a named `Object.freeze`d export, `camelCase` keys. Frozen because a setting that can be reassigned at runtime is a bug waiting to happen.
+Module-level config like this suits settings read at import time, such as the logger's. A feature wired by a module reads the env through the container instead (`get('env')` in a provider): auth takes `JWT_SECRET` and the token lifetimes that way, so each test app can use its own values.
+
+The convention here: one file per concern (`logger.config.ts`, `mailer.config.ts`), a named `Object.freeze`d export, `camelCase` keys. Frozen because a setting that can be reassigned at runtime is a bug waiting to happen.
 
 See [`logger.config.ts`](logger.config.ts) for a working example — it derives `pretty` from the environment and holds the list of field names the logger redacts. [`lifecycle.config.ts`](lifecycle.config.ts) is the minimal case: two shutdown timings, nothing else.
 

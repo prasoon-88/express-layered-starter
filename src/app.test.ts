@@ -107,8 +107,16 @@ describe('createApp route table', () => {
       'GET /health/live',
       'GET /health/ready',
       'GET /signup',
+      'POST /api/v1/auth/login',
+      'POST /api/v1/auth/logout',
+      'POST /api/v1/auth/refresh',
       'POST /api/v1/user/register',
     ]);
+  });
+
+  it('requires a signed-in caller for the profile', () => {
+    const me = build().routes.find((r) => r.path === '/api/v1/user/me');
+    assert.deepEqual(me?.access, { strategy: 'authenticated' });
   });
 
   it('gives every route an access rule and an owning module', () => {
@@ -299,6 +307,168 @@ describe('POST /api/v1/user/register', () => {
     assert.equal(first.status, 201);
     assert.equal(second.status, 422);
     assert.equal(body.code, 'IDEMPOTENCY_KEY_REUSED');
+  });
+});
+
+describe('auth flow over HTTP', () => {
+  let server: Server;
+  let baseUrl = '';
+  const limitedWith: unknown[] = [];
+
+  type Envelope = {
+    success: boolean;
+    code?: string;
+    data: { accessToken: string; refreshToken: string; tokenType: string; expiresIn: number };
+  };
+
+  before(async () => {
+    ({ server, baseUrl } = await listen({
+      rl: {
+        limit: ((policy: unknown) => {
+          limitedWith.push(policy);
+          return passThrough;
+        }) as AppOptions['rl']['limit'],
+      },
+    }));
+    const registered = await post('/api/v1/user/register', credentials);
+    assert.equal(registered.status, 201);
+  });
+
+  after(() => {
+    server.close();
+  });
+
+  const credentials = {
+    fullName: 'Ada Lovelace',
+    email: 'auth-flow@example.com',
+    password: 'correct-horse-1',
+  };
+
+  const post = (path: string, body: unknown) =>
+    fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const login = async () => {
+    const response = await post('/api/v1/auth/login', {
+      email: 'AUTH-FLOW@example.com',
+      password: credentials.password,
+    });
+    assert.equal(response.status, 200);
+    return ((await response.json()) as Envelope).data;
+  };
+
+  const me = (authorization?: string) =>
+    fetch(`${baseUrl}/api/v1/user/me`, {
+      headers: authorization ? { Authorization: authorization } : {},
+    });
+
+  it('logs in with the email in any case and returns a Bearer pair that is never cached', async () => {
+    const response = await post('/api/v1/auth/login', {
+      email: 'Auth-Flow@Example.com',
+      password: credentials.password,
+    });
+    const body = (await response.json()) as Envelope;
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.equal(body.data.tokenType, 'Bearer');
+    assert.equal(body.data.expiresIn, 900);
+    assert.equal(JSON.stringify(body).includes(credentials.password), false);
+  });
+
+  it('refuses a wrong password with 401 INVALID_CREDENTIALS', async () => {
+    const response = await post('/api/v1/auth/login', {
+      email: credentials.email,
+      password: 'wrong-password',
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal(((await response.json()) as Envelope).code, 'INVALID_CREDENTIALS');
+  });
+
+  it('serves the profile to the bearer of the access token', async () => {
+    const { accessToken } = await login();
+    const response = await me(`Bearer ${accessToken}`);
+    const body = (await response.json()) as { data: Record<string, unknown> };
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(Object.keys(body.data).sort(), ['email', 'fullName', 'id', 'role']);
+    assert.equal(body.data.role, 'NORMAL');
+  });
+
+  it('answers the profile with 401 and a challenge when there is no or a bad token', async () => {
+    const missing = await me();
+    assert.equal(missing.status, 401);
+    assert.equal(missing.headers.get('WWW-Authenticate'), 'Bearer');
+    assert.equal(missing.headers.get('Cache-Control'), 'no-store');
+    assert.equal(((await missing.json()) as Envelope).code, 'UNAUTHORIZED');
+
+    const forged = await me('Bearer not.a.token');
+    assert.equal(forged.status, 401);
+    assert.equal(forged.headers.get('WWW-Authenticate'), 'Bearer error="invalid_token"');
+    assert.equal(((await forged.json()) as Envelope).code, 'TOKEN_INVALID');
+  });
+
+  it('refuses an access token from an app with another secret', async () => {
+    const other = await listen({ rl: { limit: () => passThrough } });
+    try {
+      const response = await me(`Bearer ${(await login()).accessToken}`);
+      assert.equal(response.status, 200, 'accepted where it was issued');
+
+      const elsewhere = await fetch(`${other.baseUrl}/api/v1/user/me`, {
+        headers: { Authorization: `Bearer ${(await login()).accessToken}` },
+      });
+      assert.equal(elsewhere.status, 401);
+    } finally {
+      other.server.close();
+    }
+  });
+
+  it('rotates on refresh, and a reused refresh token revokes the whole login', async () => {
+    const first = await login();
+
+    const rotated = await post('/api/v1/auth/refresh', { refreshToken: first.refreshToken });
+    assert.equal(rotated.status, 200);
+    const second = ((await rotated.json()) as Envelope).data;
+    assert.notEqual(second.refreshToken, first.refreshToken);
+
+    const reused = await post('/api/v1/auth/refresh', { refreshToken: first.refreshToken });
+    assert.equal(reused.status, 401);
+    assert.equal(((await reused.json()) as Envelope).code, 'TOKEN_INVALID');
+
+    const afterTheft = await post('/api/v1/auth/refresh', { refreshToken: second.refreshToken });
+    assert.equal(afterTheft.status, 401, 'the rotated token died with its family');
+  });
+
+  it('logs out with 204, after which the refresh token no longer works', async () => {
+    const { refreshToken } = await login();
+
+    const response = await post('/api/v1/auth/logout', { refreshToken });
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+
+    const refreshed = await post('/api/v1/auth/refresh', { refreshToken });
+    assert.equal(refreshed.status, 401);
+  });
+
+  it('answers 400 for a body that is not a token request', async () => {
+    for (const body of [{}, { refreshToken: '' }, { refreshToken: 'x', extra: 1 }]) {
+      const response = await post('/api/v1/auth/refresh', body);
+      assert.equal(response.status, 400, JSON.stringify(body));
+    }
+  });
+
+  it('counts only failed attempts against the strict auth limit', () => {
+    const credentialLimits = limitedWith.filter(
+      (p) => typeof p === 'object' && p !== null && 'policy' in p,
+    );
+    assert.equal(credentialLimits.length, 3, 'login, refresh and logout');
+    for (const p of credentialLimits)
+      assert.deepEqual(p, { policy: 'auth', refundOnSuccess: true });
   });
 });
 

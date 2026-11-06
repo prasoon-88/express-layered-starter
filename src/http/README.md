@@ -83,10 +83,11 @@ Groups have no access default on purpose. If they had one, moving a route into a
 
 [`app.test.ts`](../app.test.ts) lists every public route. Adding one fails that test until it is added to the list, so making something public always shows up in review.
 
-`authenticate` is not built yet (JWT is on the roadmap). The `authenticated` and `roles` strategies need it, so a route that uses either one stops the boot with `No provider for "authenticate"` until it is registered in `app.ts`:
+`authenticate` comes from the auth module ([`modules/auth.module.ts`](../modules/auth.module.ts)). It verifies the `Authorization: Bearer` access token and sets `req.user`. The `authenticated` and `roles` strategies need it, so if the auth module is removed from `modules/index.ts`, any route using either one stops the boot with `No provider for "authenticate"`. A different scheme (sessions, API keys, an external identity provider) replaces that one provider; no route changes.
 
 ```ts
-container.provide('authenticate', () => createAuthenticate(env));
+defineRoute({ method: 'get', path: '/me', access: { strategy: 'authenticated' }, handlers: [userController.me] })
+defineRoute({ method: 'delete', path: '/:id', access: { strategy: 'roles', roles: ['ADMIN'] }, handlers: [userController.remove] })
 ```
 
 ## A module
@@ -117,7 +118,7 @@ export const userModule = defineModule({
 - `needs` lists what the routes receive. `routes` gets exactly those keys, typed, and nothing else.
 - Each key's type is declared next to the code that provides it, by augmenting `Registry`. No file lists every dependency.
 
-Infrastructure that needs I/O is registered in `app.ts` with the same mechanism: `limit`, `idempotent`, `readinessChecks` and `authorize`.
+Infrastructure is registered in `app.ts` with the same mechanism: `env`, `limit`, `idempotent`, `readinessChecks` and `authorize`. A provider reads settings with `get('env')`, so a test app built with a different env gets different settings, with nothing global to reset.
 
 ## The container
 

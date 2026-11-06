@@ -22,6 +22,7 @@ import { apiV1Routes } from '#routes/api/v1/index';
 
 declare module '#http/registry' {
   interface Registry {
+    env: Env;
     limit: Awaited<RateLimiter>['limit'];
     idempotent: Awaited<Idempotency>['idempotent'];
     readinessChecks: readonly ReadinessCheck[];
@@ -38,6 +39,7 @@ export type AppConfig = {
 
 export const createApp = ({ env, rl, idempotency, readinessChecks = [] }: AppConfig) => {
   const container = createContainer();
+  container.provide('env', () => env);
   container.provide('limit', () => rl.limit);
   container.provide('idempotent', () => idempotency.idempotent);
   container.provide('readinessChecks', () => readinessChecks);

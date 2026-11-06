@@ -8,7 +8,10 @@ const parse = (env: Record<string, string> = {}) => parseEnv({ NODE_ENV: 'test',
 describe('parseEnv', () => {
   describe('defaults', () => {
     it('applies a default to every optional variable', () => {
-      assert.deepEqual(parse(), {
+      const { JWT_SECRET, ...env } = parse();
+
+      assert.ok(JWT_SECRET.length >= 32, 'a random secret outside production');
+      assert.deepEqual(env, {
         NODE_ENV: 'test',
         PORT: 8000,
         SERVICE_NAME: 'app',
@@ -44,6 +47,8 @@ describe('parseEnv', () => {
         IDEMPOTENCY_TTL_S: 86_400,
         IDEMPOTENCY_LOCK_TTL_S: 60,
         IDEMPOTENCY_MAX_BODY_BYTES: 256 * 1024,
+        JWT_ACCESS_TTL_S: 900,
+        JWT_REFRESH_TTL_S: 2_592_000,
         LB_IDLE_TIMEOUT_MS: 60_000,
         HTTP_KEEP_ALIVE_TIMEOUT_MS: 65_000,
         HTTP_HEADERS_TIMEOUT_MS: 67_000,
@@ -80,7 +85,10 @@ describe('parseEnv', () => {
     it('exposes error stacks only in development', () => {
       assert.equal(parse({ NODE_ENV: 'development' }).EXPOSE_ERROR_STACK, true);
       assert.equal(parse({ NODE_ENV: 'test' }).EXPOSE_ERROR_STACK, false);
-      assert.equal(parse({ NODE_ENV: 'production' }).EXPOSE_ERROR_STACK, false);
+      assert.equal(
+        parse({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(32) }).EXPOSE_ERROR_STACK,
+        false,
+      );
     });
   });
 
@@ -256,7 +264,35 @@ describe('parseEnv', () => {
     });
 
     it('accepts a hop count', () => {
-      assert.equal(parse({ NODE_ENV: 'production', TRUST_PROXY: '1' }).TRUST_PROXY, 1);
+      assert.equal(
+        parse({ NODE_ENV: 'production', TRUST_PROXY: '1', JWT_SECRET: 'x'.repeat(32) }).TRUST_PROXY,
+        1,
+      );
+    });
+
+    it('requires JWT_SECRET, since a random one would sign out every user on each restart', () => {
+      assert.throws(() => parse({ NODE_ENV: 'production' }), /JWT_SECRET/);
+    });
+  });
+
+  describe('jwt', () => {
+    it('keeps a JWT_SECRET that is set', () => {
+      assert.equal(parse({ JWT_SECRET: 's'.repeat(40) }).JWT_SECRET, 's'.repeat(40));
+    });
+
+    it('generates a different secret for every process that has none', () => {
+      assert.notEqual(parse().JWT_SECRET, parse().JWT_SECRET);
+    });
+
+    it('rejects a secret shorter than 32 characters', () => {
+      assert.throws(() => parse({ JWT_SECRET: 'short' }), /JWT_SECRET/);
+    });
+
+    it('requires refresh tokens to outlive access tokens', () => {
+      assert.throws(
+        () => parse({ JWT_ACCESS_TTL_S: '900', JWT_REFRESH_TTL_S: '900' }),
+        /JWT_REFRESH_TTL_S/,
+      );
     });
   });
 

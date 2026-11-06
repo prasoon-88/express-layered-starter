@@ -54,7 +54,8 @@ app.ts                    the route tree: /health, then / (global limit + timeou
 ├── web/index.ts          server-rendered pages (EJS), urlencoded forms
 └── api/index.ts          express.json(), then each version
     └── v1/index.ts       /v1, then each module
-        └── user.routes.ts the actual endpoints
+        ├── auth.routes.ts /auth/login, /auth/refresh, /auth/logout
+        └── user.routes.ts /user/register, /user/me
 ```
 
 So `path: '/register'` in `user.routes.ts` is served at **`POST /api/v1/user/register`**. No file repeats a prefix its parent already added. Which modules sit under `/api/v1` is a list in [`modules/index.ts`](../modules/index.ts); a new version is a new list there and one line in `app.ts`.

@@ -1,6 +1,6 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ConflictError } from '#errors';
+import { ConflictError, UnauthorizedError } from '#errors';
 import { createUserRepository, type UserRepository } from '#repository/user.repository';
 import { verifyPassword } from '#utils/password.util';
 import { createUserService, type UserService } from './user.service.ts';
@@ -27,6 +27,12 @@ describe('userService.registerUser', () => {
     assert.equal(await verifyPassword(input.password, stored.passwordHash), true);
   });
 
+  it('gives every new account the NORMAL role', async () => {
+    const { id } = await userService.registerUser(input);
+
+    assert.equal((await userRepository.findById(id))?.role, 'NORMAL');
+  });
+
   it('refuses a second registration of the same email with EMAIL_TAKEN', async () => {
     await userService.registerUser(input);
 
@@ -50,5 +56,28 @@ describe('userService.registerUser', () => {
     const other = createUserService({ userRepository: createUserRepository() });
 
     await assert.doesNotReject(other.registerUser(input));
+  });
+});
+
+describe('userService.getProfile', () => {
+  it('returns the public fields and the role, never the hash', async () => {
+    const userService = createUserService({ userRepository: createUserRepository() });
+    const { id } = await userService.registerUser(input);
+
+    assert.deepEqual(await userService.getProfile(id), {
+      id,
+      fullName: input.fullName,
+      email: input.email,
+      role: 'NORMAL',
+    });
+  });
+
+  it('answers 401 for an account that no longer exists', async () => {
+    const userService = createUserService({ userRepository: createUserRepository() });
+
+    await assert.rejects(
+      userService.getProfile('gone'),
+      (err: unknown) => err instanceof UnauthorizedError && err.code === 'TOKEN_INVALID',
+    );
   });
 });

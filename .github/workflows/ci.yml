@@ -59,6 +59,8 @@ jobs:
         env:
           NODE_ENV: production
           PORT: 8000
+          # Throwaway: production refuses to boot without one, and this run signs no real tokens.
+          JWT_SECRET: ci-smoke-test-only-not-a-real-secret-0000
         run: |
           rm -rf src
           pnpm start &
