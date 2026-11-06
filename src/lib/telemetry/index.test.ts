@@ -83,6 +83,11 @@ const startApp = async (
       cwd: ROOT,
       env: {
         ...inherited,
+        // No coverage from the child. Under test:coverage it would write its own next to this
+        // process's, but the preload's hook rewrites every module it loads (`app.ts?iitm=true`),
+        // and those counts, merged into the report, wreck the line coverage of all of src/.
+        // Empty, not absent: spawn copies an absent NODE_V8_COVERAGE in from process.env.
+        NODE_V8_COVERAGE: '',
         NODE_ENV: 'production',
         JWT_SECRET: 'telemetry-test-only-not-a-real-secret-0123',
         PORT: String(port),
@@ -101,12 +106,14 @@ const startApp = async (
   child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
 
   const baseUrl = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; ; attempt++) {
+  // Generous: the suite boots several of these while every other test file runs alongside.
+  const deadline = Date.now() + 30_000;
+  for (;;) {
     try {
       await fetch(`${baseUrl}/health/live`);
       break;
     } catch {
-      if (attempt > 100 || child.exitCode !== null)
+      if (Date.now() > deadline || child.exitCode !== null)
         throw new Error(`the app did not start:\n${stdout}\n${stderr}`);
       await sleep(100);
     }
