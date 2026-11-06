@@ -173,6 +173,9 @@ It runs in two phases, and the phase an error comes from decides its status:
 - **The return value becomes `data` in the standard envelope**, `{ success, message, data, requestId }`, exactly what [`apiResponse`](../utils/apiResponse.util.ts) sends. Both build it with [`successEnvelope.lib.ts`](http/successEnvelope.lib.ts), so a client sees one success shape whichever way the handler responds. The `status` option picks the status code and the default message (`201` → `Created`, `202` → `Accepted`). `204` sends no body, and a handler that returns nothing gets `data: null`.
 - **The handler can still respond itself**, for a redirect or `apiResponse.pagination(res, …)` (the handler receives `(input, req, res)`). `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
 - **Built for JSON routes.** On a non-`/api` route a `400` renders the `error` view, which shows the message but not `details`.
+- **The schemas can be read back.** `getRouteContract(handler)` returns the frozen `{ body?, query?, params?, response?, status }` that a `route()` handler validates with, or `undefined` for any other function. The OpenAPI document is built from it, so what it documents is what is enforced.
+
+`buildOpenApiDocument({ title, version, routes })` in [`openapi.lib.ts`](http/openapi.lib.ts) turns mounted routes and their contracts into an OpenAPI 3.1 document. It takes routes as a plain shape rather than the `http/` manifest type, since `lib/` may not import `http/`. It throws, naming the route, when a schema has no JSON Schema form (`z.date()`, `z.bigint()`, `z.custom()`, a transform in a `response`) or when `query` or `params` is not an object. What ends up in the document is described in the root [README](../../README.md#openapi).
 
 ### `auth/`
 

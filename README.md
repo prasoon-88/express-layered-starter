@@ -23,6 +23,8 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Idempotency: `Idempotency-Key` replay of a completed `POST`/`PATCH`, conflict and reuse detection, in-memory or Redis | [`src/idempotency/`](src/idempotency/) |
 | CORS, off by default; origins, credentials, methods and headers validated at boot | [`cors.middleware.ts`](src/middlewares/cors.middleware.ts) · [`cors.config.ts`](src/config/cors.config.ts) |
 | Auth: login, short-lived JWT access tokens, rotating refresh tokens with reuse detection, logout | [Authentication](#authentication) · [`auth.service.ts`](src/services/auth.service.ts) · [`authenticate.middleware.ts`](src/middlewares/authenticate.middleware.ts) |
+| OpenAPI 3.1 document at `GET /api/docs/openapi.json`, generated from the mounted routes and their Zod schemas | [OpenAPI](#openapi) · [`openapi.lib.ts`](src/lib/http/openapi.lib.ts) |
+| Docker image (multi-stage, non-root, healthcheck) and a Compose file with Redis | [Docker](#docker) · [`Dockerfile`](Dockerfile) · [`compose.yaml`](compose.yaml) |
 | A working end-to-end endpoint to copy: `POST /api/v1/user/register` | [`user.controller.ts`](src/controllers/api/v1/user.controller.ts) · [`user.service.ts`](src/services/user.service.ts) |
 | Security headers, static serving, proxy-aware client IPs | [`app.ts`](src/app.ts) (`helmet`, `express.static`, `trust proxy`) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
@@ -49,7 +51,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 ### Prerequisites
 
 - **Node.js ≥26** — enforced via `engines` + `.npmrc` (`engine-strict`). Use the pinned version with `nvm use` (reads [`.nvmrc`](.nvmrc)).
-- **pnpm** is the only supported package manager. Enable it with Corepack (ships with Node): `corepack enable pnpm`. A `preinstall` guard rejects `npm` and `yarn`.
+- **pnpm** is the only supported package manager. Install it with Corepack, which picks the version pinned in `packageManager`: `npm install --global corepack && corepack enable pnpm` (Node 25 and later no longer bundle Corepack). A `preinstall` guard rejects `npm` and `yarn`.
 
 ### Install
 
@@ -75,6 +77,8 @@ The environment is validated at boot by the Zod schema in [`src/constants/env/sc
 
 The HTTP timeouts (`LB_IDLE_TIMEOUT_MS`, `HTTP_KEEP_ALIVE_TIMEOUT_MS`, `HTTP_HEADERS_TIMEOUT_MS`, `HTTP_REQUEST_TIMEOUT_MS`, `REQUEST_HANDLER_TIMEOUT_MS`) must keep a fixed order, which the schema checks at boot: handler < load balancer idle < keep-alive < headers (by a 1s margin) <= request. The order is what stops a load balancer from reusing a connection Node has just closed. Each variable's rule is in [`.env.example`](.env.example).
 
+With more than one instance, set `AUTH_STORE=redis` too, or a refresh token only works on the instance that issued it. See [Authentication](#authentication).
+
 Rate limiting works with no setup: it uses an in-memory store, so limits are per instance. To share limits across replicas set `RATE_LIMIT_STORE=redis` and `REDIS_URL`; `RATE_LIMIT_ON_STORE_ERROR` then decides what happens while Redis is down (`local`, `allow` or `deny`). Startup waits at most `REDIS_CONNECT_TIMEOUT_MS` for Redis, then continues and reconnects in the background. Details, headers and failure modes are in [`src/rateLimiter/README.md`](src/rateLimiter/README.md).
 
 `TRUST_PROXY` sets Express's [`trust proxy`](https://expressjs.com/en/guide/behind-proxies.html), which decides how `req.ip` is read behind a reverse proxy. Its meaning depends on the type: a **number** trusts that many hops (`1` for a single nginx/load balancer), `true`/`false` trust all/none, and a string like `loopback` or a subnet trusts specific addresses. Leave it empty locally (no proxy); set it to the real hop count in production, or a client can forge their IP.
@@ -96,7 +100,36 @@ pnpm build   # type-check + compile src/ -> dist/, and copy the EJS templates (n
 pnpm start   # node dist/server.js
 ```
 
-`dist/` is self-contained next to `public/` and `node_modules/`: it does not read `src/`. CI proves it by deleting `src/` before the smoke test.
+`dist/` is self-contained next to `public/`, `node_modules/` and `package.json` (Node resolves the `#imports` map from it): it does not read `src/`. CI proves it by deleting `src/` before the smoke test.
+
+## Docker
+
+```bash
+JWT_SECRET=<at least 32 characters> docker compose up --build --wait
+```
+
+[`compose.yaml`](compose.yaml) runs the production image next to Redis, with `AUTH_STORE`, `RATE_LIMIT_STORE` and `IDEMPOTENCY_STORE` all on Redis, so it behaves like a multi-instance deploy: sessions, limits and idempotency keys survive an app restart. The app is on `http://localhost:8000` (`APP_PORT` changes the host port). `--wait` returns once both containers are healthy. `docker compose down` stops it; add `--volumes` to drop Redis's data as well. Use `pnpm dev` for day-to-day work.
+
+Compose sets the container's variables itself and does not load `.env` into it, so a local `NODE_ENV=development` never reaches the image. It does read `JWT_SECRET` and `APP_PORT` from the shell or `.env`, and refuses to start without `JWT_SECRET`. Add any other variable from [`.env.example`](.env.example) under `environment:`.
+
+The [`Dockerfile`](Dockerfile) has three build stages and ships only the last:
+
+| Stage | Does | In the final image |
+|-------|------|:---:|
+| `build` | installs every dependency, runs `pnpm build` | `dist/` only |
+| `prod-deps` | installs production dependencies only | `node_modules/` only |
+| `runtime` | `node:26-alpine`, `NODE_ENV=production`, `package.json`, `public/` | yes |
+
+**Behaviors worth knowing**
+
+- **No pnpm, compiler, `src/` or dev dependency in the image.** pnpm comes from Corepack at the `packageManager` version, in the build stages only. Installs run with `--frozen-lockfile`, so a lockfile out of date with `package.json` fails the build, and `--ignore-scripts`, since the `preinstall` and husky hooks are for developer machines.
+- **Runs as the `node` user**, not root. The app's files are owned by root, so the process can read its code but not change it.
+- **Node is PID 1**, started directly rather than through `pnpm start`, so `SIGTERM` reaches [`server.ts`](src/server.ts) and the drain in [`lib/lifecycle/`](src/lib/lifecycle/) runs. `stop_grace_period` (15s) is longer than `SHUTDOWN_TIMEOUT_MS` (8s by default); raise both together. Under Kubernetes the matching setting is `terminationGracePeriodSeconds`.
+- **The `HEALTHCHECK` probes `/health/live`**, with Node's `fetch` (Alpine has no curl). Liveness and not readiness, because Docker and Swarm restart an unhealthy container, and a restart cannot fix a Redis outage. Point the load balancer, or the Kubernetes readiness probe, at `/health/ready`.
+- **Secrets never enter the build.** [`.dockerignore`](.dockerignore) excludes `.env*`, along with `node_modules`, `dist` and `.git`. Pass `JWT_SECRET` and `REDIS_URL` at run time.
+- **Redis keeps an append-only file** on the `redis-data` volume, so revoked sessions stay revoked across a Redis restart.
+
+CI builds the image, starts the stack with `--wait`, and checks readiness, the OpenAPI document, a login and refresh stored in Redis, and that the process is not root ([`ci.yml`](.github/workflows/ci.yml), job `docker`).
 
 ## TypeScript & build
 
@@ -149,6 +182,8 @@ express-layered-starter/
 ├── package.json         # deps + subpath import aliases
 ├── tsconfig.json        # type-check rules (editor, pnpm typecheck, ESLint)
 ├── tsconfig.build.json  # production build: src/ -> dist/
+├── Dockerfile           # multi-stage production image
+├── compose.yaml         # the image plus Redis, every store on Redis
 ├── dist/                # compiled output (gitignored)
 └── src/
     ├── app.ts           # builds the Express app: container, route tree, middleware; no listen()
@@ -169,6 +204,7 @@ express-layered-starter/
     ├── routes/          # URL + access rule → middleware and controller
     ├── types/           # project-wide type augmentations (*.d.ts)
     ├── services/        # business logic, rules, orchestration
+    ├── testing/         # helpers for *.test.ts only (#testing/*); not built, lint-blocked elsewhere
     ├── utils/           # small pure helpers
     └── views/           # EJS templates
 ```
@@ -317,9 +353,24 @@ How a client uses it: log in, send the access token on every call, and on a `401
 - **A `401` says why** in `WWW-Authenticate` ([RFC 6750](https://www.rfc-editor.org/rfc/rfc6750)): `Bearer` when no token was sent, `Bearer error="invalid_token"` when one was refused. The body's `code` is `UNAUTHORIZED`, `TOKEN_INVALID` or `TOKEN_EXPIRED`.
 - **Token responses are never cached** (`Cache-Control: no-store`), and they skip idempotency on purpose: a replay would hand the same tokens out again, and the idempotency store would keep live credentials.
 - **Only failures count against the `auth` rate limit** on login, refresh and logout (`refundOnSuccess`). A client refreshing every 15 minutes never hits it; a password-guessing loop does.
-- **Refresh tokens live in memory** until a database branch replaces [`refreshToken.repository.ts`](src/repository/refreshToken.repository.ts), like users. A restart signs everyone out, and replicas do not share them. The repository comment gives the SQL shape the four calls take.
+- **`AUTH_STORE` picks where refresh tokens live.** `memory` (the default) is per instance and lost on restart, and production logs a warning about it. `redis` shares them across replicas: a token issued by one instance can be refreshed, reused-detected or logged out on any other. Each token is a Redis hash that expires with the token, and a revoked family is remembered for `JWT_REFRESH_TTL_S`. While Redis is unreachable, login, refresh and logout answer `503` and `/health/ready` reports the critical `auth-store` check as down, while requests carrying a valid access token keep working. Both stores pass the same contract test ([`refreshToken.repository.test.ts`](src/repository/refreshToken.repository.test.ts)), which is what a database version must pass too.
 
 Protect a route by choosing its access strategy; see [`src/http/README.md`](src/http/README.md#access-rules). The handler then reads `req.user` (`{ id, email, role }`).
+
+## OpenAPI
+
+`GET /api/docs/openapi.json` returns an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document for every route under `/api`. Load it into Postman, Insomnia, Swagger Editor, or a client generator such as `openapi-typescript`. The template ships no UI and no extra dependency.
+
+Nothing in the document is written by hand. It is built from two things the server already enforces, so it cannot drift from the code:
+
+- **The route table** that `mount` records: method, full path, access rule and module. A `public` route gets `security: []`; any other route requires `bearerAuth` and lists a `401`; a `roles` route also lists a `403` and names its roles. The module name becomes the tag.
+- **The `route()` contract** of each handler: `params` and `query` become parameters, `body` becomes the request body, and `response` plus `status` become the success response, wrapped in the `{ success, message, data, requestId }` envelope. A `204` has no body. A route with any input schema lists a `400`, and every operation has a `default` response with the `Error` envelope.
+
+Input schemas are documented as the client sends them and response schemas as the server sends them, so a field with `.default()` is optional in a request but always present in a reply. Path parameters without a `params` schema are documented as strings. A handler that isn't wrapped in `route()` still appears, with only its path, access and error responses.
+
+**Schemas that can't be described fail loudly.** `z.date()`, `z.bigint()`, `z.custom()` and a `.transform()` in a response schema have no JSON Schema form (a transform in an input schema is fine, so `z.coerce.number()` in a query works), so building the document throws with the route and the schema named, for example `POST /api/v1/user/register: the body schema cannot be represented in OpenAPI`. `query` and `params` must be object schemas. The document is built once, on the first request, and cached; the app test that fetches it against the real modules is what catches such a route in CI.
+
+The document is public on purpose (it holds no user data). Its `info.title` is `SERVICE_NAME` and `info.version` is `SERVICE_VERSION`, which defaults to the `version` in `package.json` (and `SERVICE_NAME` to its `name`), however the process is started. To keep the document private, give the route in [`routes/api/docs.routes.ts`](src/routes/api/docs.routes.ts) a `roles` access rule, or drop `docsModule` from `apiModules` in [`modules/index.ts`](src/modules/index.ts).
 
 ## Health checks
 
@@ -369,7 +420,8 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 | `pnpm format` | Rewrite files with Prettier |
 | `pnpm format:check` | Verify formatting without writing |
 | `pnpm test` | Run `src/**/*.test.ts` with Node's built-in test runner (no Jest/Vitest) |
-| `pnpm check` | Everything CI runs: typecheck → lint → format:check → test → build |
+| `pnpm check` | Everything CI runs except the Docker job: typecheck → lint → format:check → test → build |
+| `docker compose up --build --wait` | The production image plus Redis (needs `JWT_SECRET`); see [Docker](#docker) |
 
 ## Roadmap
 
@@ -387,6 +439,9 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] Input validation at the controller boundary (`route()` + Zod)
 - [x] Required access rule on every route (`public` / `authenticated` / `roles`), `authorize` middleware
 - [x] Auth: register, login, JWT access tokens, rotating refresh tokens with reuse detection, logout, `GET /api/v1/user/me`
+- [x] Refresh tokens in memory or Redis, behind one contract test
+- [x] OpenAPI 3.1 document generated from the route table
+- [x] Docker image and Compose file with Redis
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
 - [x] Tests: unit tests plus real HTTP tests against a listening app (Node's test runner and `fetch`, no extra framework); Redis integration tests in CI

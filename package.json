@@ -99,6 +99,9 @@
     "#utils/*": {
       "app-source": "./src/utils/*.ts",
       "default": "./dist/utils/*.js"
+    },
+    "#testing/*": {
+      "app-source": "./src/testing/*.ts"
     }
   },
   "lint-staged": {

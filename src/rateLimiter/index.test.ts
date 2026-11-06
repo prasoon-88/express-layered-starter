@@ -1,59 +1,17 @@
-import { after, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import pino from 'pino';
 import { parseEnv } from '#constants/env/schema';
 import { ServiceUnavailableError, TooManyRequestsError } from '#errors';
+import { freePort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
 import { initRateLimit } from './index.ts';
 
 // These tests run against a real redis-server, so they prove the limiter really shares state
 // through Redis. CI installs it; locally they are skipped, with the reason, when it is missing.
-const REDIS_SERVER_BIN = process.env.REDIS_SERVER_BIN ?? 'redis-server';
-const hasRedisServer = spawnSync(REDIS_SERVER_BIN, ['--version']).status === 0;
-const skip =
-  !hasRedisServer && !process.env.CI
-    ? `${REDIS_SERVER_BIN} not found (set REDIS_SERVER_BIN to run these tests)`
-    : false;
-
 const log = pino({ level: 'silent' });
-
-const freePort = () =>
-  new Promise<number>((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => resolve(typeof address === 'object' && address ? address.port : 0));
-    });
-  });
-
-const servers: ChildProcess[] = [];
-
-const startRedisServer = async (port: number) => {
-  const child = spawn(REDIS_SERVER_BIN, [
-    '--port',
-    String(port),
-    '--save',
-    '',
-    '--appendonly',
-    'no',
-  ]);
-  servers.push(child);
-  await new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.stdout.on('data', (chunk: Buffer) => {
-      if (chunk.toString().includes('Ready to accept connections')) resolve();
-    });
-  });
-};
-
-after(() => {
-  for (const child of servers) child.kill();
-});
 
 const buildEnv = (port: number, overrides: Record<string, string> = {}) =>
   parseEnv({

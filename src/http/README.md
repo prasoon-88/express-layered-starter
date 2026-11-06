@@ -35,7 +35,7 @@ The tree in [`app.ts`](../app.ts) is the whole URL space on one screen:
 ```ts
 defineGroup('/', [
   ...probeModules,                                      // /health, before the global limit
-  defineGroup('/', [...pageModules, apiRoutes([apiV1Routes(apiV1Modules)])], {
+  defineGroup('/', [...pageModules, apiRoutes([...apiModules, apiV1Routes(apiV1Modules)])], {
     use: [rl.limit('global'), requestTimeoutMiddleware(env.REQUEST_HANDLER_TIMEOUT_MS)],
   }),
 ])
@@ -118,7 +118,9 @@ export const userModule = defineModule({
 - `needs` lists what the routes receive. `routes` gets exactly those keys, typed, and nothing else.
 - Each key's type is declared next to the code that provides it, by augmenting `Registry`. No file lists every dependency.
 
-Infrastructure is registered in `app.ts` with the same mechanism: `env`, `limit`, `idempotent`, `readinessChecks` and `authorize`. A provider reads settings with `get('env')`, so a test app built with a different env gets different settings, with nothing global to reset.
+Infrastructure is registered in `app.ts` with the same mechanism: `env`, `limit`, `idempotent`, `readinessChecks`, `authorize`, and `redis` when `server.ts` opened a connection. A provider reads settings with `get('env')`, so a test app built with a different env gets different settings, with nothing global to reset.
+
+`mount` itself provides one key, `routeTable`, so a module can describe the app it is part of (the docs module builds the OpenAPI document from it). `routeTable.all()` returns the same entries as `routes` below. It throws while mounting is still running, because the table is incomplete until then, so read it from a request handler, not from a provider.
 
 ## The container
 
@@ -186,7 +188,7 @@ A group's `use` runs for every request whose path starts with the prefix, includ
 
 - [`container.test.ts`](container.test.ts), [`paths.test.ts`](paths.test.ts) and [`mount.test.ts`](mount.test.ts) cover every rule above, against a real Express server.
 - A module can be mounted alone with a fresh container and fakes for only the keys it needs.
-- `createApp` returns `{ app, routes }`. `routes` lists every route's method, full path, access rule and module, and is what the public-route test reads.
+- `createApp` returns `{ app, routes }`. `routes` lists every route's method, full path, access rule, module and `controller` (its last handler, whose [`route()`](../lib/http/route.lib.ts) schemas the OpenAPI document reads), and is what the public-route test reads.
 
 ## Dependency rules
 

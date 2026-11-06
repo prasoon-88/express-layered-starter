@@ -2,8 +2,11 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Server } from 'node:http';
 import type { RequestHandler } from 'express';
+import { randomUUID } from 'node:crypto';
 import pino from 'pino';
 import { initIdempotency } from '#idempotency';
+import { closeRedisClient, createRedisClient, type Redis } from '#lib/redis/index';
+import { freePort, redisSkip, startRedisServer } from '#testing/redisServer';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
@@ -103,6 +106,7 @@ describe('createApp route table', () => {
     // Adding a public route means adding it here, so it shows up in review.
     assert.deepEqual(publicRoutes, [
       'GET /',
+      'GET /api/docs/openapi.json',
       'GET /health',
       'GET /health/live',
       'GET /health/ready',
@@ -112,6 +116,18 @@ describe('createApp route table', () => {
       'POST /api/v1/auth/refresh',
       'POST /api/v1/user/register',
     ]);
+  });
+
+  it('refuses to build with AUTH_STORE=redis and no Redis client, naming what is missing', () => {
+    assert.throws(
+      () =>
+        createApp({
+          env: parseEnv({ NODE_ENV: 'test', AUTH_STORE: 'redis', REDIS_URL: 'redis://x:6379' }),
+          rl: { limit: () => passThrough },
+          idempotency: { idempotent: () => passThrough },
+        }),
+      /redis/,
+    );
   });
 
   it('requires a signed-in caller for the profile', () => {
@@ -469,6 +485,164 @@ describe('auth flow over HTTP', () => {
     assert.equal(credentialLimits.length, 3, 'login, refresh and logout');
     for (const p of credentialLimits)
       assert.deepEqual(p, { policy: 'auth', refundOnSuccess: true });
+  });
+});
+
+describe('sessions shared through Redis (AUTH_STORE=redis)', { skip: redisSkip }, () => {
+  const servers: Server[] = [];
+  let redis: Redis;
+  let env: ReturnType<typeof parseEnv>;
+
+  before(async () => {
+    const port = await freePort();
+    await startRedisServer(port);
+    env = parseEnv({
+      NODE_ENV: 'test',
+      SERVICE_NAME: `auth-replicas-${randomUUID()}`,
+      AUTH_STORE: 'redis',
+      REDIS_URL: `redis://127.0.0.1:${port}`,
+      JWT_SECRET: 'replicas-share-this-secret-0123456789',
+    });
+    redis = await createRedisClient(env.REDIS_URL!, pino({ level: 'silent' }), {
+      connectTimeoutMs: 1000,
+    });
+  });
+
+  after(async () => {
+    servers.forEach((s) => s.close());
+    await closeRedisClient(redis);
+  });
+
+  const replica = async () => {
+    const { app } = createApp({
+      env,
+      rl: { limit: () => passThrough },
+      idempotency: { idempotent: () => passThrough },
+      redis,
+    });
+    const server = app.listen(0);
+    servers.push(server);
+    await new Promise((resolve) => server.once('listening', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    return `http://127.0.0.1:${address.port}/api/v1`;
+  };
+
+  const post = (url: string, body: unknown) =>
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  // Users are still per app (main has no database), so the user lives on replica a only. The
+  // reuse check runs before the user lookup, which is what lets replica b act on a's tokens.
+  it('detects on one replica the reuse of a token another replica rotated', async () => {
+    const [a, b] = [await replica(), await replica()];
+    const user = { fullName: 'Ada', email: 'replica@example.com', password: 'correct-horse-1' };
+    assert.equal((await post(`${a}/user/register`, user)).status, 201);
+
+    type Pair = { data: { refreshToken: string } };
+    const login = await post(`${a}/auth/login`, { email: user.email, password: user.password });
+    const first = ((await login.json()) as Pair).data;
+    const rotated = await post(`${a}/auth/refresh`, { refreshToken: first.refreshToken });
+    assert.equal(rotated.status, 200);
+    const second = ((await rotated.json()) as Pair).data;
+
+    const reusedOnB = await post(`${b}/auth/refresh`, { refreshToken: first.refreshToken });
+    assert.equal(reusedOnB.status, 401);
+
+    // Only true when b revoked the family in the store a reads from.
+    const afterOnA = await post(`${a}/auth/refresh`, { refreshToken: second.refreshToken });
+    assert.equal(afterOnA.status, 401, 'b revoked the family for every replica');
+  });
+
+  it('logs out on one replica a login made on another', async () => {
+    const [a, b] = [await replica(), await replica()];
+    const user = { fullName: 'Ada', email: 'logout@example.com', password: 'correct-horse-1' };
+    await post(`${a}/user/register`, user);
+    const login = await post(`${a}/auth/login`, { email: user.email, password: user.password });
+    const { refreshToken } = ((await login.json()) as { data: { refreshToken: string } }).data;
+
+    assert.equal((await post(`${b}/auth/logout`, { refreshToken })).status, 204);
+    assert.equal((await post(`${a}/auth/refresh`, { refreshToken })).status, 401);
+  });
+});
+
+describe('GET /api/docs/openapi.json', () => {
+  let server: Server;
+  let baseUrl = '';
+  let routes: ReturnType<typeof createApp>['routes'];
+
+  type Doc = {
+    openapi: string;
+    info: { title: string; version: string };
+    paths: Record<
+      string,
+      Record<string, { security: unknown[]; requestBody?: unknown; responses: object }>
+    >;
+  };
+
+  before(async () => {
+    ({ server, baseUrl } = await listen({ rl: { limit: () => passThrough } }));
+    routes = createApp({
+      env: parseEnv({ NODE_ENV: 'test' }),
+      rl: { limit: () => passThrough },
+      idempotency: { idempotent: () => passThrough },
+    }).routes;
+  });
+
+  after(() => {
+    server.close();
+  });
+
+  const fetchDoc = async () => {
+    const response = await fetch(`${baseUrl}/api/docs/openapi.json`);
+    assert.equal(response.status, 200);
+    return (await response.json()) as Doc;
+  };
+
+  it('serves the bare document, not wrapped in the success envelope', async () => {
+    const doc = await fetchDoc();
+
+    assert.equal(doc.openapi, '3.1.0');
+    assert.equal(doc.info.title, 'app');
+    assert.equal('success' in doc, false);
+  });
+
+  it('documents every /api route and nothing outside /api', async () => {
+    const doc = await fetchDoc();
+    const documented = Object.entries(doc.paths)
+      .flatMap(([path, ops]) =>
+        Object.keys(ops).map((m) => `${m.toUpperCase()} ${path.replace(/\{(\w+)\}/g, ':$1')}`),
+      )
+      .sort();
+    const mounted = routes
+      .filter((r) => r.path.startsWith('/api/'))
+      .map((r) => `${r.method} ${r.path}`)
+      .sort();
+
+    assert.deepEqual(documented, mounted);
+    assert.ok(documented.length >= 6);
+  });
+
+  it('requires the bearer token exactly where the route does', async () => {
+    const { paths } = await fetchDoc();
+
+    assert.deepEqual(paths['/api/v1/user/me']?.get?.security, [{ bearerAuth: [] }]);
+    assert.deepEqual(paths['/api/v1/auth/login']?.post?.security, []);
+  });
+
+  it('describes request bodies and the documented status of each route', async () => {
+    const { paths } = await fetchDoc();
+
+    assert.ok(paths['/api/v1/auth/login']?.post?.requestBody);
+    assert.ok('201' in (paths['/api/v1/user/register']?.post?.responses ?? {}));
+    assert.ok('204' in (paths['/api/v1/auth/logout']?.post?.responses ?? {}));
+  });
+
+  it('serves the same document on every request', async () => {
+    assert.deepEqual(await fetchDoc(), await fetchDoc());
   });
 });
 

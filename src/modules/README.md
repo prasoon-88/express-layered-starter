@@ -48,7 +48,7 @@ Then one entry in [`index.ts`](index.ts), in the list for where it is served:
 export const apiV1Modules = [userModule, postModule]
 ```
 
-`app.ts` places each list in the route tree (`probeModules` before the global rate limit, `pageModules` and `apiV1Modules` after it), so adding a feature never changes `app.ts`. A new API version is a new list here and one line in the tree. The lists are explicit on purpose: order is the order Express tries routes in, and the unreachable-route check depends on it.
+`app.ts` places each list in the route tree (`probeModules` before the global rate limit; `pageModules`, then `apiModules` for unversioned `/api` routes such as `/api/docs`, then `apiV1Modules` after it), so adding a feature never changes `app.ts`. A new API version is a new list here and one line in the tree. The lists are explicit on purpose: order is the order Express tries routes in, and the unreachable-route check depends on it.
 
 ## Rules
 - **A key has one owner.** Two modules registering the same key stops the boot. Share a service by having one module provide it and the others list it in `needs`, or `get` it in a provider. [`auth.module.ts`](auth.module.ts) does the second: its `authService` uses `get('userRepository')` from the user module.

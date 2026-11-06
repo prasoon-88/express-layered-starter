@@ -18,7 +18,11 @@ export type RouteManifestEntry = Readonly<{
   path: string;
   access: Access;
   module?: string;
+  /** The last handler. Built with `route()`, it carries the schemas the OpenAPI builder reads. */
+  controller: RequestHandler;
 }>;
+
+const ROUTE_TABLE_OWNER = 'mount';
 
 type MountOptions = {
   container: Container;
@@ -91,13 +95,31 @@ const registerModules = (container: Container, modules: readonly ModuleDef[]) =>
  * Routes are registered depth-first, which is the order Express matches them in.
  */
 export const mount = ({ container, strategies, root }: MountOptions) => {
+  const manifest: RouteManifestEntry[] = [];
+  let finished: readonly RouteManifestEntry[] | undefined = undefined;
+
+  // Registered before the modules, so a module providing it too is refused as a duplicate.
+  // Routes are built while mounting, so a route function reading it gets a partial list: refused.
+  container.provide(
+    'routeTable',
+    () => ({
+      all: () => {
+        if (!finished)
+          throw new RouteDefinitionError(
+            'The route table was read before mounting finished: read it in a request handler',
+          );
+        return finished;
+      },
+    }),
+    ROUTE_TABLE_OWNER,
+  );
+
   const modules: ModuleDef[] = [];
   collectModules(root, modules);
   registerModules(container, modules);
 
   const strategyNames = Object.keys(strategies).join(', ');
   const registered = new Map<RouteMethod, string[]>();
-  const manifest: RouteManifestEntry[] = [];
 
   const resolve = (node: unknown, where: string, insideModule?: string) => {
     if (!isNode(node)) return fail(`${where}: expected a route, a group or a module`);
@@ -181,6 +203,7 @@ export const mount = ({ container, strategies, root }: MountOptions) => {
         path,
         access: Object.freeze({ ...rule }),
         ...(module && { module }),
+        controller: handlers[handlers.length - 1]!,
       }),
     );
     parent[route.method](route.path, ...pre, ...guards, ...handlers);
@@ -226,5 +249,6 @@ export const mount = ({ container, strategies, root }: MountOptions) => {
   if (top.def.kind === 'group') mountGroup(router, top.def, '', top.module);
   else mountRoute(router, top.def, '', top.module);
 
-  return { router, manifest: Object.freeze(manifest) };
+  finished = Object.freeze(manifest);
+  return { router, manifest: finished };
 };

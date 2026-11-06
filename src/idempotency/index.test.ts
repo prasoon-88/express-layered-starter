@@ -1,8 +1,6 @@
-import { after, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import pino from 'pino';
@@ -10,49 +8,10 @@ import { parseEnv } from '#constants/env/schema';
 import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
 import { ServiceUnavailableError } from '#errors';
 import { closeRedisClient, createRedisClient } from '#lib/redis/index';
+import { freePort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
 import { initIdempotency } from './index.ts';
 
-const REDIS_SERVER_BIN = process.env.REDIS_SERVER_BIN ?? 'redis-server';
-const hasRedisServer = spawnSync(REDIS_SERVER_BIN, ['--version']).status === 0;
-const skip =
-  !hasRedisServer && !process.env.CI
-    ? `${REDIS_SERVER_BIN} not found (set REDIS_SERVER_BIN to run these tests)`
-    : false;
-
 const log = pino({ level: 'silent' });
-const servers: ChildProcess[] = [];
-
-const freePort = () =>
-  new Promise<number>((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => resolve(typeof address === 'object' && address ? address.port : 0));
-    });
-  });
-
-const startRedisServer = async (port: number) => {
-  const child = spawn(REDIS_SERVER_BIN, [
-    '--port',
-    String(port),
-    '--save',
-    '',
-    '--appendonly',
-    'no',
-  ]);
-  servers.push(child);
-  await new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.stdout.on('data', (chunk: Buffer) => {
-      if (chunk.toString().includes('Ready to accept connections')) resolve();
-    });
-  });
-};
-
-after(() => {
-  for (const child of servers) child.kill();
-});
 
 class FakeResponse extends EventEmitter {
   statusCode = 200;

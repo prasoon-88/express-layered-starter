@@ -130,6 +130,26 @@ export default defineConfig([
   // Per-layer dependency direction (these override the rule above for their folder).
   ...layerConfigs,
 
+  // Test helpers are not built into dist/, so production code importing one would crash at boot.
+  // A separate rule from no-restricted-imports, so the per-layer configs above don't replace it.
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/testing/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportDeclaration[source.value=/^#testing\\u002F/]',
+          message: '#testing/* is for *.test.ts files only; it is not part of the build.',
+        },
+        {
+          selector: 'ImportExpression[source.value=/^#testing\\u002F/]',
+          message: '#testing/* is for *.test.ts files only; it is not part of the build.',
+        },
+      ],
+    },
+  },
+
   // Must be last: turns off stylistic rules that Prettier owns.
   prettier,
 ]);

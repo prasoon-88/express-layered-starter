@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
-const { route } = await import('./route.lib.ts');
+const { route, getRouteContract } = await import('./route.lib.ts');
 const { apiResponse } = await import('#utils/apiResponse.util');
 const { default: requestContext } = await import('#contexts/requestContext');
 
@@ -117,5 +117,33 @@ describe('route() success response', () => {
 
     assert.equal(res.sends, 1);
     assert.deepEqual((res.body as { data: unknown }).data, { sentBy: 'handler' });
+  });
+});
+
+describe('getRouteContract', () => {
+  it('returns the schemas and status a handler was built with', () => {
+    const body = z.object({ a: z.string() });
+    const response = z.object({ id: z.number() });
+    const contract = getRouteContract(route({ body, response }, () => null, { status: 201 }));
+
+    assert.equal(contract?.body, body);
+    assert.equal(contract?.response, response);
+    assert.equal(contract?.query, undefined);
+    assert.equal(contract?.status, 201);
+  });
+
+  it('defaults the status to 200', () => {
+    assert.equal(getRouteContract(route({}, () => null))?.status, 200);
+  });
+
+  it('knows nothing about a handler that route() did not build', () => {
+    assert.equal(
+      getRouteContract((_req, _res, next) => next()),
+      undefined,
+    );
+  });
+
+  it('is frozen, so the documented contract cannot drift from the enforced one', () => {
+    assert.ok(Object.isFrozen(getRouteContract(route({}, () => null))));
   });
 });

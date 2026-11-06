@@ -6,6 +6,7 @@ import {
   createRefreshTokenRepository,
   type RefreshTokenRepository,
 } from '#repository/refreshToken.repository';
+import { createRedisRefreshTokenRepository } from '#repository/refreshToken.redis.repository';
 import { authRoutes } from '#routes/api/v1/auth.routes';
 import { createAuthService, type AuthService } from '#services/auth.service';
 
@@ -34,7 +35,15 @@ export const authModule = defineModule({
         ttlS: env.JWT_ACCESS_TTL_S,
       });
     },
-    refreshTokenRepository: () => createRefreshTokenRepository(),
+    refreshTokenRepository: (get) => {
+      const env = get('env');
+      if (env.AUTH_STORE === 'memory') return createRefreshTokenRepository();
+      return createRedisRefreshTokenRepository({
+        redis: get('redis'),
+        prefix: `${env.SERVICE_NAME}:auth`,
+        familyTtlMs: env.JWT_REFRESH_TTL_S * 1000,
+      });
+    },
     authService: (get) =>
       createAuthService({
         userRepository: get('userRepository'),

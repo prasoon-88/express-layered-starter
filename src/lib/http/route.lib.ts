@@ -21,12 +21,30 @@ type Input<S extends Schemas> = {
 
 const LOCATIONS = ['body', 'query', 'params'] as const;
 
+/** What a `route()` handler accepts and answers. Read by the OpenAPI builder. */
+export type RouteContract = Readonly<Schemas & { status: number }>;
+
+// Keyed by the handler itself, so the contract travels with it through any route tree.
+const contracts = new WeakMap<RequestHandler, RouteContract>();
+
+/** The contract of a handler built with `route()`, or undefined for any other handler. */
+export const getRouteContract = (handler: RequestHandler) => contracts.get(handler);
+
 export function route<S extends Schemas>(
   schemas: S,
   handler: (input: Input<S>, req: Request, res: Response) => unknown,
   opts: { status?: number } = {},
 ): RequestHandler {
-  return async (req, res, next) => {
+  // Validation reads this same frozen object, so what is documented is what is enforced.
+  const contract: RouteContract = Object.freeze({
+    body: schemas.body,
+    query: schemas.query,
+    params: schemas.params,
+    response: schemas.response,
+    status: opts.status ?? HTTP_STATUS.OK,
+  });
+
+  const wrapped: RequestHandler = async (req, res, next) => {
     // Phase 1 — input. Only a ZodError raised here is the client's fault (400).
     // Every location is checked so the client gets all failures at once, each
     // path prefixed with where it came from (body.email, query.page, params.id).
@@ -34,7 +52,7 @@ export function route<S extends Schemas>(
     const issues: ZodError['issues'] = [];
     try {
       for (const loc of LOCATIONS) {
-        const schema = schemas[loc];
+        const schema = contract[loc];
         if (!schema) continue;
         const parsed = await schema.safeParseAsync(req[loc]);
         if (parsed.success) input[loc] = parsed.data;
@@ -52,12 +70,12 @@ export function route<S extends Schemas>(
       const result = await handler(input as Input<S>, req, res);
       if (res.headersSent) return;
       let out = result;
-      if (schemas.response) {
-        const parsed = await schemas.response.safeParseAsync(out);
+      if (contract.response) {
+        const parsed = await contract.response.safeParseAsync(out);
         if (!parsed.success) throw new Error(`Response schema mismatch: ${parsed.error.message}`);
         out = parsed.data;
       }
-      const status = opts.status ?? HTTP_STATUS.OK;
+      const { status } = contract;
       if (status === HTTP_STATUS.NO_CONTENT) {
         res.status(status).end(); // a 204 has no body, so there is no envelope to send
         return;
@@ -71,4 +89,7 @@ export function route<S extends Schemas>(
       );
     }
   };
+
+  contracts.set(wrapped, contract);
+  return wrapped;
 }

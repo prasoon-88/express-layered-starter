@@ -12,11 +12,12 @@ import { requestTimeoutMiddleware } from '#middlewares/requestTimeout.middleware
 import type { Env } from '#constants/env/schema';
 import type { RateLimiter } from '#rateLimiter';
 import type { Idempotency } from '#idempotency';
+import type { Redis } from '#lib/redis/index';
 import { createContainer } from '#http/container';
 import { mount } from '#http/mount';
 import { defineGroup } from '#http/routes';
 import { builtInStrategies } from '#http/strategies';
-import { apiV1Modules, pageModules, probeModules } from '#modules/index';
+import { apiModules, apiV1Modules, pageModules, probeModules } from '#modules/index';
 import { apiRoutes } from '#routes/api/index';
 import { apiV1Routes } from '#routes/api/v1/index';
 
@@ -26,6 +27,8 @@ declare module '#http/registry' {
     limit: Awaited<RateLimiter>['limit'];
     idempotent: Awaited<Idempotency>['idempotent'];
     readinessChecks: readonly ReadinessCheck[];
+    /** Registered only when server.ts opened a connection. */
+    redis: Redis;
   }
 }
 
@@ -35,11 +38,14 @@ export type AppConfig = {
   idempotency: Pick<Awaited<Idempotency>, 'idempotent'>;
   /** Dependencies `/health/ready` probes. Whoever creates a dependency passes its check in. */
   readinessChecks?: readonly ReadinessCheck[];
+  /** The shared client, when a store is set to redis. A feature that needs it without it stops the boot. */
+  redis?: Redis;
 };
 
-export const createApp = ({ env, rl, idempotency, readinessChecks = [] }: AppConfig) => {
+export const createApp = ({ env, rl, idempotency, readinessChecks = [], redis }: AppConfig) => {
   const container = createContainer();
   container.provide('env', () => env);
+  if (redis) container.provide('redis', () => redis);
   container.provide('limit', () => rl.limit);
   container.provide('idempotent', () => idempotency.idempotent);
   container.provide('readinessChecks', () => readinessChecks);
@@ -52,7 +58,7 @@ export const createApp = ({ env, rl, idempotency, readinessChecks = [] }: AppCon
     strategies: builtInStrategies,
     root: defineGroup('/', [
       ...probeModules,
-      defineGroup('/', [...pageModules, apiRoutes([apiV1Routes(apiV1Modules)])], {
+      defineGroup('/', [...pageModules, apiRoutes([...apiModules, apiV1Routes(apiV1Modules)])], {
         use: [rl.limit('global'), requestTimeoutMiddleware(env.REQUEST_HANDLER_TIMEOUT_MS)],
       }),
     ]),

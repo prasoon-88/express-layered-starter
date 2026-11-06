@@ -15,6 +15,7 @@ describe('parseEnv', () => {
         NODE_ENV: 'test',
         PORT: 8000,
         SERVICE_NAME: 'app',
+        SERVICE_VERSION: '0.0.0',
         LOG_LEVEL: 'info',
         LOG_PRETTY: false,
         LOG_IGNORE_PATHS: ['/health', '/favicon.ico'],
@@ -47,6 +48,7 @@ describe('parseEnv', () => {
         IDEMPOTENCY_TTL_S: 86_400,
         IDEMPOTENCY_LOCK_TTL_S: 60,
         IDEMPOTENCY_MAX_BODY_BYTES: 256 * 1024,
+        AUTH_STORE: 'memory',
         JWT_ACCESS_TTL_S: 900,
         JWT_REFRESH_TTL_S: 2_592_000,
         LB_IDLE_TIMEOUT_MS: 60_000,
@@ -97,6 +99,21 @@ describe('parseEnv', () => {
       assert.equal(parse({ SERVICE_NAME: 'api', npm_package_name: 'pkg' }).SERVICE_NAME, 'api');
       assert.equal(parse({ npm_package_name: 'pkg' }).SERVICE_NAME, 'pkg');
       assert.equal(parse().SERVICE_NAME, 'app');
+    });
+  });
+
+  describe('SERVICE_VERSION', () => {
+    it('prefers SERVICE_VERSION, then the package version, then "0.0.0"', () => {
+      assert.equal(
+        parse({ SERVICE_VERSION: '2.1.0', npm_package_version: '1.0.0' }).SERVICE_VERSION,
+        '2.1.0',
+      );
+      assert.equal(parse({ npm_package_version: '1.0.0' }).SERVICE_VERSION, '1.0.0');
+      assert.equal(parse().SERVICE_VERSION, '0.0.0');
+    });
+
+    it('never leaks npm_package_version into the parsed env', () => {
+      assert.equal('npm_package_version' in parse({ npm_package_version: '1.0.0' }), false);
     });
   });
 
@@ -286,6 +303,18 @@ describe('parseEnv', () => {
 
     it('rejects a secret shorter than 32 characters', () => {
       assert.throws(() => parse({ JWT_SECRET: 'short' }), /JWT_SECRET/);
+    });
+
+    it('requires REDIS_URL when the session store is redis', () => {
+      assert.throws(() => parse({ AUTH_STORE: 'redis' }), /REDIS_URL/);
+      assert.equal(
+        parse({ AUTH_STORE: 'redis', REDIS_URL: 'redis://localhost:6379' }).AUTH_STORE,
+        'redis',
+      );
+    });
+
+    it('rejects an unknown session store', () => {
+      assert.throws(() => parse({ AUTH_STORE: 'postgres' }), /AUTH_STORE/);
     });
 
     it('requires refresh tokens to outlive access tokens', () => {

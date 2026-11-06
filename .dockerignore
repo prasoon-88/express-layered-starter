@@ -1,0 +1,20 @@
+# Built inside the image; a host copy would be for another OS or out of date.
+node_modules
+dist
+
+# Secrets never enter the build context. Configure the container with environment variables.
+.env
+.env.*
+!.env.example
+
+# Not needed to build or run.
+.git
+.github
+.husky
+.vscode
+coverage
+*.log
+*.tsbuildinfo
+Dockerfile
+.dockerignore
+compose.yaml

@@ -29,6 +29,8 @@ import {
 } from '#constants/rateLimit.constants';
 import REGEX from '#constants/regex.constant';
 import {
+  AUTH_STORES,
+  DEFAULT_AUTH_STORE,
   DEFAULT_JWT_ACCESS_TTL_S,
   DEFAULT_JWT_REFRESH_TTL_S,
   JWT_SECRET_MIN_LENGTH,
@@ -126,8 +128,11 @@ const envSchema = z.preprocess(
       NODE_ENV: z.enum(NODE_ENVS),
       PORT: wholeNumber({ min: 1, max: 65_535 }).default(8000),
       SERVICE_NAME: z.string().trim().min(1).optional(),
-      // Set by pnpm/npm for every script; the fallback service name.
+      // From package.json (see ./index.ts); the fallback service name.
       npm_package_name: z.string().optional(),
+      // Reported as the API version in the OpenAPI document.
+      SERVICE_VERSION: z.string().trim().min(1).optional(),
+      npm_package_version: z.string().optional(),
       LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
       LOG_PRETTY: bool(),
       LOG_IGNORE_PATHS: list
@@ -193,6 +198,7 @@ const envSchema = z.preprocess(
         .string()
         .min(JWT_SECRET_MIN_LENGTH, `Must be at least ${JWT_SECRET_MIN_LENGTH} characters`)
         .optional(),
+      AUTH_STORE: z.enum(AUTH_STORES).default(DEFAULT_AUTH_STORE),
       JWT_ACCESS_TTL_S: wholeNumber({ min: 1 }).default(DEFAULT_JWT_ACCESS_TTL_S),
       JWT_REFRESH_TTL_S: wholeNumber({ min: 1 }).default(DEFAULT_JWT_REFRESH_TTL_S),
       LB_IDLE_TIMEOUT_MS: wholeNumber().default(60_000),
@@ -253,6 +259,9 @@ const envSchema = z.preprocess(
         }
       }
 
+      if (e.AUTH_STORE === 'redis' && !e.REDIS_URL)
+        addIssue(['REDIS_URL'], 'Required when AUTH_STORE=redis');
+
       if (e.IDEMPOTENCY_ENABLED) {
         if (e.IDEMPOTENCY_STORE === 'redis' && !e.REDIS_URL)
           addIssue(['REDIS_URL'], 'Required when IDEMPOTENCY_STORE=redis');
@@ -308,9 +317,10 @@ const envSchema = z.preprocess(
           'must be less than LB_IDLE_TIMEOUT_MS ( REQUEST_HANDLER_TIMEOUT_MS < LB_IDLE_TIMEOUT_MS )',
         );
     })
-    .transform(({ npm_package_name, ...e }) => ({
+    .transform(({ npm_package_name, npm_package_version, ...e }) => ({
       ...e,
       SERVICE_NAME: e.SERVICE_NAME ?? npm_package_name ?? 'app',
+      SERVICE_VERSION: e.SERVICE_VERSION ?? npm_package_version ?? '0.0.0',
       // Outside production a missing secret is generated per process: tokens then stop working
       // when the process restarts. Set JWT_SECRET in .env to keep them across restarts.
       JWT_SECRET: e.JWT_SECRET ?? randomBytes(48).toString('base64url'),

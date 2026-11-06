@@ -39,9 +39,14 @@ A repository is a factory, like the layers above it. Anything configured at star
 | File | Holds | A database branch keeps |
 |------|-------|-------------------------|
 | [`user.repository.ts`](user.repository.ts) | users: `create`, `findByEmail`, `findById` | a unique index on `email`; `create` rejects a duplicate with `EMAIL_TAKEN` |
-| [`refreshToken.repository.ts`](refreshToken.repository.ts) | refresh tokens: `create`, `findById`, `markUsed`, `revokeFamily` | `markUsed` as one conditional `UPDATE … WHERE used_at IS NULL` checked by row count; revocation on a family row, so a token written after it is revoked too; a TTL index on `expiresAt` |
+| [`refreshToken.repository.ts`](refreshToken.repository.ts) | the `RefreshTokenRepository` interface and the in-memory store (`AUTH_STORE=memory`): `create`, `findById`, `markUsed`, `revokeFamily` | `markUsed` as one conditional `UPDATE … WHERE used_at IS NULL` checked by row count; revocation on a family row, so a token written after it is revoked too; a TTL index on `expiresAt` |
+| [`refreshToken.redis.repository.ts`](refreshToken.redis.repository.ts) | the same interface on Redis (`AUTH_STORE=redis`), shared by replicas | — |
 
-Both are atomic where it matters: the check and the write happen in one synchronous step, so two concurrent requests cannot both pass the check. A database version must keep that property with a constraint or a conditional write, not a read followed by a write.
+Every store is atomic where it matters: the check and the write happen in one step (a synchronous block in memory, a Lua script in Redis), so two concurrent requests cannot both pass the check. A database version must keep that property with a constraint or a conditional write, not a read followed by a write.
+
+The refresh token stores share one contract test: [`refreshToken.repository.test.ts`](refreshToken.repository.test.ts) runs the same cases against each. A new store is done when it passes them. The Redis cases run against a real `redis-server`, started by [`testing/redisServer.ts`](../testing/redisServer.ts).
+
+A store that depends on something remote turns its failures into `503 SERVICE_UNAVAILABLE`, so a client knows to retry. Without that, the error middleware would report a dropped connection as a `500`, which reads as a bug.
 
 ## Pagination
 Repositories return raw rows and a count; [`Paginator`](../utils/paginator.util.ts) handles the arithmetic and the response meta:

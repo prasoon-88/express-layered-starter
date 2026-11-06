@@ -1,0 +1,44 @@
+# Production-like stack: the built image plus Redis, with every store shared through Redis.
+#   JWT_SECRET=<32+ characters> docker compose up --build --wait
+# For day-to-day work use `pnpm dev`; this is for checking the image and multi-instance behavior.
+
+services:
+  app:
+    build: .
+    ports:
+      - '${APP_PORT:-8000}:8000'
+    # Set here, not through env_file, so a developer's .env (NODE_ENV=development, ...) never
+    # leaks into the container. Any other variable from .env.example can be added below.
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (at least 32 characters) in the shell or in .env}
+      REDIS_URL: redis://redis:6379
+      AUTH_STORE: redis
+      RATE_LIMIT_STORE: redis
+      IDEMPOTENCY_STORE: redis
+      # Published straight to the host, no proxy in front, so there is nothing to trust.
+      TRUST_PROXY: 'false'
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Longer than SHUTDOWN_TIMEOUT_MS (8s by default), so the app finishes its drain before Docker
+    # sends SIGKILL. Raise both together.
+    stop_grace_period: 15s
+
+  redis:
+    image: redis:7.4-alpine
+    # Append-only file: refresh tokens and revoked sessions survive a Redis restart.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis-data:

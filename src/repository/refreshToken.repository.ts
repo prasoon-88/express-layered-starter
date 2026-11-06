@@ -15,11 +15,22 @@ export interface StoredRefreshToken extends NewRefreshToken {
   revokedAt: number | null;
 }
 
-// In-memory until a database branch replaces this file. A database keeps the same four calls:
-// - markUsed is `UPDATE tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, checking the row count.
-// - Revocation lives on the family row, not on each token, so a token written into a family
+// Every store implements these four calls with the same guarantees (see the contract test):
+// - markUsed is atomic: `UPDATE tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, checking the row count.
+// - Revocation lives on the family, not on each token, so a token written into a family
 //   after it was revoked (a rotation racing a reuse) is revoked too.
-export const createRefreshTokenRepository = () => {
+// - An expired token is forgotten.
+export interface RefreshTokenRepository {
+  create(data: NewRefreshToken, now: number): Promise<void>;
+  findById(id: string): Promise<StoredRefreshToken | undefined>;
+  /** True for exactly one caller: the first to use the token. */
+  markUsed(id: string, now: number): Promise<boolean>;
+  /** Keeps the first revocation time. */
+  revokeFamily(familyId: string, now: number): Promise<void>;
+}
+
+// Per instance and lost on restart. AUTH_STORE=redis selects the shared store instead.
+export const createRefreshTokenRepository = (): RefreshTokenRepository => {
   const byId = new Map<string, Omit<StoredRefreshToken, 'revokedAt'>>();
   const revokedFamilies = new Map<string, number>();
 
@@ -61,5 +72,3 @@ export const createRefreshTokenRepository = () => {
 
   return { create, findById, markUsed, revokeFamily };
 };
-
-export type RefreshTokenRepository = ReturnType<typeof createRefreshTokenRepository>;

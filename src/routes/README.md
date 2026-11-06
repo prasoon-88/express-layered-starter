@@ -52,7 +52,8 @@ The function receives only the keys its type names. A [module](../modules/README
 app.ts                    the route tree: /health, then / (global limit + timeout) → web, /api
 ├── health/index.ts       /health, /health/ready, /health/live
 ├── web/index.ts          server-rendered pages (EJS), urlencoded forms
-└── api/index.ts          express.json(), then each version
+└── api/index.ts          express.json(), then unversioned modules, then each version
+    ├── docs.routes.ts    /docs/openapi.json
     └── v1/index.ts       /v1, then each module
         ├── auth.routes.ts /auth/login, /auth/refresh, /auth/logout
         └── user.routes.ts /user/register, /user/me

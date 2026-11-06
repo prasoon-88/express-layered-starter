@@ -68,3 +68,46 @@ jobs:
             --retry 20 --retry-delay 1 --retry-connrefused \
             http://localhost:8000/health/live
           curl --fail --silent --show-error http://localhost:8000/ | grep --quiet "<h1>Home Page</h1>"
+
+  docker:
+    name: Docker image and Compose stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Throwaway: production refuses to boot without one, and this run signs no real tokens.
+      JWT_SECRET: ci-smoke-test-only-not-a-real-secret-0000
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # --wait returns once the image's HEALTHCHECK and Redis's report healthy, and fails if either never does.
+      - name: Build and start
+        run: docker compose up --build --detach --wait --wait-timeout 120
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          api=http://localhost:8000
+
+          test "$(docker compose exec -T app id -u)" != 0
+          curl --fail --silent --show-error "$api/health/ready" | jq --exit-status '.data.status == "ok"'
+          curl --fail --silent --show-error "$api/api/docs/openapi.json" \
+            | jq --exit-status '.info.title == "express-layered-starter" and .openapi == "3.1.0"'
+
+          # Login and refresh go through the Redis session store.
+          user='{"fullName":"Docker Smoke","email":"smoke@example.com","password":"Sm0ke-test-password!"}'
+          curl --fail --silent --show-error -H 'Content-Type: application/json' -d "$user" "$api/api/v1/user/register" > /dev/null
+          login=$(curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","password":"Sm0ke-test-password!"}' "$api/api/v1/auth/login")
+          refresh=$(jq --raw-output '.data.refreshToken' <<< "$login")
+          curl --fail --silent --show-error -H 'Content-Type: application/json' \
+            -d "{\"refreshToken\":\"$refresh\"}" "$api/api/v1/auth/refresh" > /dev/null
+          test "$(docker compose exec -T redis redis-cli keys 'express-layered-starter:auth:rt:*' | wc -l)" -ge 2
+
+      - name: Logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop
+        if: always()
+        run: docker compose down --volumes

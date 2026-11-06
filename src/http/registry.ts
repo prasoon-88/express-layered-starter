@@ -1,5 +1,11 @@
 import type { RequestHandler } from 'express';
 import type { UserRole } from '#constants/user.constant';
+import type { RouteManifestEntry } from './mount.ts';
+
+export type RouteTable = {
+  /** Every mounted route, in match order. Throws if read before mounting finished. */
+  all: () => readonly RouteManifestEntry[];
+};
 
 /**
  * Everything the container can provide, by key. Whoever registers a key declares its type next to
@@ -16,6 +22,8 @@ export interface Registry {
   authenticate: RequestHandler;
   /** Rejects a caller whose role is not listed. Runs after `authenticate`. */
   authorize: (roles: readonly UserRole[]) => RequestHandler;
+  /** Provided by `mount` itself, for features that describe the API, such as OpenAPI. */
+  routeTable: RouteTable;
 }
 
 type NoOptions = Record<never, never>;

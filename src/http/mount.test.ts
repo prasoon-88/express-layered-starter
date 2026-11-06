@@ -209,10 +209,12 @@ describe('mount: access', () => {
     );
   });
 
-  it('lists every route with its full path, access and module', () => {
+  it('lists every route with its full path, access, module and controller', () => {
+    const openController = say('open');
+    const goneController = say('gone');
     const { manifest } = build(
       defineGroup('/', [
-        defineRoute({ method: 'get', path: '/open', access: open, handlers: [say('open')] }),
+        defineRoute({ method: 'get', path: '/open', access: open, handlers: [openController] }),
         defineModule({
           name: 'admin',
           needs: [],
@@ -222,7 +224,7 @@ describe('mount: access', () => {
                 method: 'delete',
                 path: '/:id',
                 access: { strategy: 'roles', roles: ['ADMIN'] },
-                handlers: [say('gone')],
+                handlers: [record([], 'before'), goneController],
               }),
             ]),
         }),
@@ -230,12 +232,13 @@ describe('mount: access', () => {
     );
 
     assert.deepEqual(manifest, [
-      { method: 'GET', path: '/open', access: open },
+      { method: 'GET', path: '/open', access: open, controller: openController },
       {
         method: 'DELETE',
         path: '/admin/:id',
         access: { strategy: 'roles', roles: ['ADMIN'] },
         module: 'admin',
+        controller: goneController,
       },
     ]);
     assert.equal(Object.isFrozen(manifest), true);
@@ -495,6 +498,39 @@ describe('mount: modules', () => {
           handlers: [say(mountTestShout(mountTestMessage))],
         }),
       ]),
+  });
+
+  it('provides the route table, readable once mounting is done', () => {
+    let table: { all: () => readonly unknown[] } | undefined;
+    const { manifest } = build(
+      defineModule({
+        name: 'docs',
+        needs: ['routeTable'],
+        routes: ({ routeTable }) => {
+          table = routeTable;
+          assert.throws(() => routeTable.all(), /before mounting finished/);
+          return defineRoute({ method: 'get', path: '/docs', access: open, handlers: [say('d')] });
+        },
+      }),
+    );
+
+    assert.equal(table?.all(), manifest);
+  });
+
+  it('refuses a module that provides the route table itself', () => {
+    failsWith(
+      () =>
+        build(
+          defineModule({
+            name: 'impostor',
+            providers: { routeTable: () => ({ all: () => [] }) },
+            needs: [],
+            routes: () =>
+              defineRoute({ method: 'get', path: '/', access: open, handlers: [say('x')] }),
+          }),
+        ),
+      /routeTable/,
+    );
   });
 
   it('registers its providers and hands its routes what they need', async () => {
