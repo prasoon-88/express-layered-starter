@@ -18,7 +18,7 @@ const ALLOW = {
   schemas: ['constants'],
   repository: ['models', 'utils', 'lib', 'errors', 'config', 'constants'],
   services: ['repository', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
-  controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants'],
+  controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants', 'schemas'],
   // Route files receive controllers and middleware as arguments (see src/http/README.md).
   routes: ['http', 'middlewares', 'constants', 'config'],
   middlewares: ['errors', 'lib', 'config', 'constants', 'contexts', 'schemas'],

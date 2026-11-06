@@ -13,3 +13,7 @@ export const authUserSchema = z.object({
 });
 
 export type AuthUser = z.infer<typeof authUserSchema>;
+
+// A password being set: at signup and on a change. Capped because hashing cost grows with input,
+// and an uncapped field is a cheap way to burn CPU.
+export const newPasswordSchema = z.string().min(8).max(128);

@@ -330,7 +330,7 @@ Two tokens, because one token cannot be both cheap to check and revocable:
 | Lifetime | `JWT_ACCESS_TTL_S`, 15 minutes | `JWT_REFRESH_TTL_S`, 30 days, renewed on each refresh |
 | Sent as | `Authorization: Bearer <token>` | JSON body of `/auth/refresh` and `/auth/logout` |
 | Checked by | signature and claims only, no store lookup | the refresh token store |
-| Revocable | no: it simply expires | yes |
+| Revocable | no: it simply expires | yes: one login, or every login of the user |
 
 | Endpoint | Access | Body | Answer |
 |----------|--------|------|--------|
@@ -338,6 +338,8 @@ Two tokens, because one token cannot be both cheap to check and revocable:
 | `POST /api/v1/auth/login` | public | `email`, `password` | `200` `{ accessToken, refreshToken, tokenType: "Bearer", expiresIn }` |
 | `POST /api/v1/auth/refresh` | public: the body is the credential | `refreshToken` | `200`, a new pair; the old refresh token stops working |
 | `POST /api/v1/auth/logout` | public: the body is the credential | `refreshToken` | `204`, always |
+| `POST /api/v1/auth/logout-all` | `authenticated` | — | `204`; every login of the user ends, this one included |
+| `POST /api/v1/auth/password` | `authenticated` | `currentPassword`, `newPassword` | `200`, a new pair; every other login ends. `403 INVALID_CREDENTIALS` for a wrong current password |
 | `GET /api/v1/user/me` | `authenticated` | — | `200` `{ id, fullName, email, role }` |
 
 How a client uses it: log in, send the access token on every call, and on a `401` with `TOKEN_EXPIRED` call refresh once and retry. When refresh fails, send the user to log in.
@@ -349,10 +351,13 @@ How a client uses it: log in, send the access token on every call, and on a `401
 - **Refresh reads the user again**, so a changed role or a deleted account takes effect at the next refresh, within `JWT_ACCESS_TTL_S`. Until then an issued access token stays valid; that window is the price of not checking a store on every request.
 - **A wrong password and an unknown email answer the same** (`401 INVALID_CREDENTIALS`), and both cost one scrypt hash, so neither the message nor the timing tells an attacker which emails are registered.
 - **Logout always answers `204`**, whether the token was valid, already revoked, or garbage. A token with a known id but the wrong secret changes nothing, so nobody can log another person out by guessing an id.
+- **Ending every session is one counter, not a search.** Each user has a `sessionVersion`, and each refresh token records the value it was issued under. A password change and `logout-all` raise it, so every older refresh token is refused (and its family revoked) at its next use, on any replica and with either store. A login that had already read the user when the change landed carries the old value, so it is ended too. On a database this is one integer column.
+- **What ending sessions does not do**: access tokens already issued keep working until they expire, within `JWT_ACCESS_TTL_S`, as with logout. Keep that ttl short.
+- **A password change needs the current password**, even with a valid access token, so a stolen token alone cannot take over the account. A wrong one answers `403`, not `401`: the access token is fine, and a `401` would send the client into a refresh. It counts against the `auth` limit, so it cannot be used to guess the password. The new password follows the signup rule (8 to 128 characters) and must differ from the current one. Of two changes made at the same moment from the same current password, one wins and the other gets the `403`. The caller gets a new pair and stays signed in.
 - **Verification is pinned**: algorithm HS256, issuer and audience both `SERVICE_NAME`, 5 seconds of clock tolerance. A token signed with `alg: none`, another HMAC algorithm, another secret or for another service is refused. Change `SERVICE_NAME` and every issued token is refused.
 - **A `401` says why** in `WWW-Authenticate` ([RFC 6750](https://www.rfc-editor.org/rfc/rfc6750)): `Bearer` when no token was sent, `Bearer error="invalid_token"` when one was refused. The body's `code` is `UNAUTHORIZED`, `TOKEN_INVALID` or `TOKEN_EXPIRED`.
 - **Token responses are never cached** (`Cache-Control: no-store`), and they skip idempotency on purpose: a replay would hand the same tokens out again, and the idempotency store would keep live credentials.
-- **Only failures count against the `auth` rate limit** on login, refresh and logout (`refundOnSuccess`). A client refreshing every 15 minutes never hits it; a password-guessing loop does.
+- **Only failures count against the `auth` rate limit** on login, refresh, logout and password change (`refundOnSuccess`). A client refreshing every 15 minutes never hits it; a password-guessing loop does.
 - **`AUTH_STORE` picks where refresh tokens live.** `memory` (the default) is per instance and lost on restart, and production logs a warning about it. `redis` shares them across replicas: a token issued by one instance can be refreshed, reused-detected or logged out on any other. Each token is a Redis hash that expires with the token, and a revoked family is remembered for `JWT_REFRESH_TTL_S`. While Redis is unreachable, login, refresh and logout answer `503` and `/health/ready` reports the critical `auth-store` check as down, while requests carrying a valid access token keep working. Both stores pass the same contract test ([`refreshToken.repository.test.ts`](src/repository/refreshToken.repository.test.ts)), which is what a database version must pass too.
 
 Protect a route by choosing its access strategy; see [`src/http/README.md`](src/http/README.md#access-rules). The handler then reads `req.user` (`{ id, email, role }`).
@@ -420,7 +425,8 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 | `pnpm format` | Rewrite files with Prettier |
 | `pnpm format:check` | Verify formatting without writing |
 | `pnpm test` | Run `src/**/*.test.ts` with Node's built-in test runner (no Jest/Vitest) |
-| `pnpm check` | Everything CI runs except the Docker job: typecheck → lint → format:check → test → build |
+| `pnpm test:coverage` | The same, plus a coverage report; fails below 95% of lines or 88% of branches or functions |
+| `pnpm check` | Everything CI runs except the Docker job: typecheck → lint → format:check → test:coverage → build |
 | `docker compose up --build --wait` | The production image plus Redis (needs `JWT_SECRET`); see [Docker](#docker) |
 
 ## Roadmap
@@ -445,3 +451,5 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
 - [x] Tests: unit tests plus real HTTP tests against a listening app (Node's test runner and `fetch`, no extra framework); Redis integration tests in CI
+- [x] Coverage thresholds in `pnpm check` and CI, counting files no test loads
+- [x] Password change and "log out everywhere", both ending sessions through `sessionVersion`

@@ -38,7 +38,7 @@ A repository is a factory, like the layers above it. Anything configured at star
 
 | File | Holds | A database branch keeps |
 |------|-------|-------------------------|
-| [`user.repository.ts`](user.repository.ts) | users: `create`, `findByEmail`, `findById` | a unique index on `email`; `create` rejects a duplicate with `EMAIL_TAKEN` |
+| [`user.repository.ts`](user.repository.ts) | users: `create`, `findByEmail`, `findById`, `updatePassword`, `endSessions` | a unique index on `email`; `create` rejects a duplicate with `EMAIL_TAKEN`; a `session_version` integer column, raised in the same statement as the change (`SET session_version = session_version + 1`); `updatePassword` as a compare-and-set on the old hash (`WHERE id = ? AND password_hash = ?`), returning nothing when it changed |
 | [`refreshToken.repository.ts`](refreshToken.repository.ts) | the `RefreshTokenRepository` interface and the in-memory store (`AUTH_STORE=memory`): `create`, `findById`, `markUsed`, `revokeFamily` | `markUsed` as one conditional `UPDATE … WHERE used_at IS NULL` checked by row count; revocation on a family row, so a token written after it is revoked too; a TTL index on `expiresAt` |
 | [`refreshToken.redis.repository.ts`](refreshToken.redis.repository.ts) | the same interface on Redis (`AUTH_STORE=redis`), shared by replicas | — |
 

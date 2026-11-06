@@ -152,7 +152,7 @@ repository/  ← uses models
    ↑
 services/    ← uses repository, utils, lib, errors, config
    ↑
-controllers/ ← uses services (types), utils, errors, lib (route())
+controllers/ ← uses services (types), utils, errors, lib (route()), schemas (shared rules such as newPasswordSchema)
    ↑
 routes/      ← uses http (definitions) + middlewares; receives controllers as arguments
    ↑

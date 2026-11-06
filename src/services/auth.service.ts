@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
 import { TOKEN_TYPE } from '#constants/auth.constant';
 import REGEX from '#constants/regex.constant';
-import { UnauthorizedError } from '#errors';
+import { ForbiddenError, UnauthorizedError } from '#errors';
 import type { AccessTokens } from '#lib/auth/accessToken';
 import { getLogger } from '#lib/logger/index';
 import type { RefreshTokenRepository } from '#repository/refreshToken.repository';
@@ -16,6 +16,11 @@ export interface LoginInput {
   password: string;
 }
 
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -25,7 +30,10 @@ export interface TokenPair {
 }
 
 type AuthServiceDeps = {
-  userRepository: Pick<UserRepository, 'findByEmail' | 'findById'>;
+  userRepository: Pick<
+    UserRepository,
+    'findByEmail' | 'findById' | 'updatePassword' | 'endSessions'
+  >;
   refreshTokenRepository: RefreshTokenRepository;
   accessTokens: Pick<AccessTokens, 'sign'>;
   refreshTtlS: number;
@@ -49,6 +57,12 @@ const invalidCredentials = () =>
   new UnauthorizedError('Invalid email or password', APP_ERROR_CODES.INVALID_CREDENTIALS);
 const invalidToken = () =>
   new UnauthorizedError('Invalid refresh token', APP_ERROR_CODES.TOKEN_INVALID);
+// Same as getProfile: the access token outlived its account, so the client ends at login.
+const accountGone = () =>
+  new UnauthorizedError('Account no longer exists', APP_ERROR_CODES.TOKEN_INVALID);
+// A 403, not a 401: the access token is fine, and a 401 would make the client try a refresh.
+const wrongCurrentPassword = () =>
+  new ForbiddenError('Current password is incorrect', APP_ERROR_CODES.INVALID_CREDENTIALS);
 
 export const createAuthService = ({
   userRepository,
@@ -67,6 +81,7 @@ export const createAuthService = ({
         id,
         userId: user.id,
         familyId,
+        sessionVersion: user.sessionVersion,
         hash: sha256(secret).toString('hex'),
         expiresAt: issuedAt + refreshTtlS * 1000,
       },
@@ -123,9 +138,10 @@ export const createAuthService = ({
       throw invalidToken();
     }
 
-    // Read again: the role or the account may have changed since the last token was signed.
+    // Read again: the role or the account may have changed since the last token was signed, and
+    // a password change or "log out everywhere" since this login raised sessionVersion.
     const user = await userRepository.findById(stored.userId);
-    if (!user) {
+    if (!user || user.sessionVersion !== stored.sessionVersion) {
       await refreshTokenRepository.revokeFamily(stored.familyId, now());
       throw invalidToken();
     }
@@ -139,7 +155,36 @@ export const createAuthService = ({
     if (stored) await refreshTokenRepository.revokeFamily(stored.familyId, now());
   };
 
-  return { login, refresh, logout };
+  // Ends every session of the user, this one included. Nothing is looked up in the token store:
+  // each refresh token is refused at its next use, because it carries the old sessionVersion.
+  // A login that read the user before this ran carries the old version too, so it is ended as well.
+  const logoutAll = async (userId: string): Promise<void> => {
+    await userRepository.endSessions(userId);
+  };
+
+  // Ends every other session and returns a pair for a new one, so the caller stays signed in.
+  const changePassword = async (
+    userId: string,
+    { currentPassword, newPassword }: ChangePasswordInput,
+  ): Promise<TokenPair> => {
+    const user = await userRepository.findById(userId);
+    if (!user) throw accountGone();
+
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) throw wrongCurrentPassword();
+
+    const updated = await userRepository.updatePassword(
+      user.id,
+      user.passwordHash,
+      await hashPassword(newPassword),
+    );
+    if (updated) return issue(updated, randomUUID());
+
+    // Changed or deleted since it was read: by a concurrent change that won, so the password
+    // just checked is no longer the current one.
+    throw (await userRepository.findById(userId)) ? wrongCurrentPassword() : accountGone();
+  };
+
+  return { login, refresh, logout, logoutAll, changePassword };
 };
 
 export type AuthService = ReturnType<typeof createAuthService>;

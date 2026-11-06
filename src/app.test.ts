@@ -478,11 +478,97 @@ describe('auth flow over HTTP', () => {
     }
   });
 
+  // A user of its own, so changing the password or ending sessions leaves the other tests alone.
+  const freshUser = async () => {
+    const user = {
+      fullName: 'Grace',
+      email: `${randomUUID()}@example.com`,
+      password: 'first-pass-1',
+    };
+    assert.equal((await post('/api/v1/user/register', user)).status, 201);
+    const signIn = async (password = user.password) => {
+      const response = await post('/api/v1/auth/login', { email: user.email, password });
+      return { status: response.status, tokens: ((await response.json()) as Envelope).data };
+    };
+    return { user, signIn };
+  };
+
+  const authed = (path: string, accessToken: string, body?: unknown) =>
+    fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+
+  it('ends every session with POST /auth/logout-all, and needs an access token for it', async () => {
+    const { signIn } = await freshUser();
+    const phone = (await signIn()).tokens;
+    const laptop = (await signIn()).tokens;
+
+    const anonymous = await post('/api/v1/auth/logout-all', {});
+    assert.equal(anonymous.status, 401);
+
+    const response = await authed('/api/v1/auth/logout-all', laptop.accessToken);
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+
+    for (const { refreshToken } of [phone, laptop]) {
+      const refreshed = await post('/api/v1/auth/refresh', { refreshToken });
+      assert.equal(refreshed.status, 401);
+    }
+    assert.equal((await signIn()).status, 200, 'a new login still works');
+  });
+
+  it('changes the password with POST /auth/password: new pair, old sessions and password dead', async () => {
+    const { user, signIn } = await freshUser();
+    const other = (await signIn()).tokens;
+    const current = (await signIn()).tokens;
+
+    const response = await authed('/api/v1/auth/password', current.accessToken, {
+      currentPassword: user.password,
+      newPassword: 'second-pass-2',
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    const fresh = ((await response.json()) as Envelope).data;
+
+    const refresh = ({ refreshToken }: { refreshToken: string }) =>
+      post('/api/v1/auth/refresh', { refreshToken });
+    assert.equal((await refresh(fresh)).status, 200, 'the new pair works');
+    assert.equal((await refresh(other)).status, 401);
+    assert.equal((await refresh(current)).status, 401);
+    assert.equal((await signIn()).status, 401, 'the old password is refused');
+    assert.equal((await signIn('second-pass-2')).status, 200);
+  });
+
+  it('refuses a wrong current password with 403, and a bad body with 400', async () => {
+    const { user, signIn } = await freshUser();
+    const { accessToken } = (await signIn()).tokens;
+
+    const wrong = await authed('/api/v1/auth/password', accessToken, {
+      currentPassword: 'not-my-password',
+      newPassword: 'second-pass-2',
+    });
+    assert.equal(wrong.status, 403);
+    assert.equal(((await wrong.json()) as Envelope).code, 'INVALID_CREDENTIALS');
+
+    for (const body of [
+      { currentPassword: user.password, newPassword: 'short' },
+      { currentPassword: user.password, newPassword: user.password },
+      { currentPassword: user.password, newPassword: 'second-pass-2', extra: 1 },
+      { newPassword: 'second-pass-2' },
+    ]) {
+      const response = await authed('/api/v1/auth/password', accessToken, body);
+      assert.equal(response.status, 400, JSON.stringify(body));
+    }
+    assert.equal((await signIn()).status, 200, 'the password is unchanged');
+  });
+
   it('counts only failed attempts against the strict auth limit', () => {
     const credentialLimits = limitedWith.filter(
       (p) => typeof p === 'object' && p !== null && 'policy' in p,
     );
-    assert.equal(credentialLimits.length, 3, 'login, refresh and logout');
+    assert.equal(credentialLimits.length, 4, 'login, refresh, logout and password');
     for (const p of credentialLimits)
       assert.deepEqual(p, { policy: 'auth', refundOnSuccess: true });
   });

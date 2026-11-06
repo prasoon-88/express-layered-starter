@@ -53,6 +53,7 @@ export const createRedisRefreshTokenRepository = ({
         .hSet(key, {
           userId: data.userId,
           familyId: data.familyId,
+          sessionVersion: String(data.sessionVersion),
           hash: data.hash,
           expiresAt: String(data.expiresAt),
         })
@@ -63,13 +64,15 @@ export const createRedisRefreshTokenRepository = ({
   const findById = (id: string) =>
     guard(async (): Promise<StoredRefreshToken | undefined> => {
       const row = await redis.hGetAll(tokenKey(id));
-      if (!row.userId || !row.familyId || !row.hash || !row.expiresAt) return undefined;
+      if (!row.userId || !row.familyId || !row.sessionVersion || !row.hash || !row.expiresAt)
+        return undefined;
 
       const revokedAt = await redis.get(familyKey(row.familyId));
       return {
         id,
         userId: row.userId,
         familyId: row.familyId,
+        sessionVersion: Number(row.sessionVersion),
         hash: row.hash,
         expiresAt: Number(row.expiresAt),
         usedAt: row.usedAt === undefined ? null : Number(row.usedAt),

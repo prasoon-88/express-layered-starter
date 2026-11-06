@@ -1,6 +1,6 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { UnauthorizedError } from '#errors';
+import { ForbiddenError, UnauthorizedError } from '#errors';
 import type { AccessClaims } from '#lib/auth/accessToken';
 import type { StoredUser } from '#repository/user.repository';
 import { createRefreshTokenRepository } from '#repository/refreshToken.repository';
@@ -35,15 +35,27 @@ describe('authService', () => {
           email: 'ada@example.com',
           passwordHash: await hashPassword(PASSWORD),
           role: 'NORMAL',
+          sessionVersion: 0,
         },
       ],
     ]);
     signed = [];
     nowMs = 1_000_000;
+    // Same semantics as user.repository: whole-row replacement, compare-and-set on the hash.
+    const replace = (id: string, change: Partial<StoredUser>, when = () => true) => {
+      const current = users.get(id);
+      if (!current || !when()) return Promise.resolve(undefined);
+      const next = { ...current, ...change, sessionVersion: current.sessionVersion + 1 };
+      users.set(id, next);
+      return Promise.resolve(next);
+    };
     auth = createAuthService({
       userRepository: {
         findByEmail: (email) => Promise.resolve([...users.values()].find((u) => u.email === email)),
         findById: (id) => Promise.resolve(users.get(id)),
+        updatePassword: (id, expectedHash, passwordHash) =>
+          replace(id, { passwordHash }, () => users.get(id)?.passwordHash === expectedHash),
+        endSessions: (id) => replace(id, {}),
       },
       refreshTokenRepository: createRefreshTokenRepository(),
       accessTokens: {
@@ -192,6 +204,96 @@ describe('authService', () => {
 
       await auth.logout(`${id}.forged`);
       await assert.doesNotReject(auth.refresh(refreshToken));
+    });
+  });
+
+  describe('logoutAll', () => {
+    it('ends every session of the user, including tokens rotated before it', async () => {
+      const phone = await login();
+      const laptop = await auth.refresh((await login()).refreshToken);
+
+      await auth.logoutAll('u1');
+
+      await assert.rejects(auth.refresh(phone.refreshToken), rejectsWith('TOKEN_INVALID'));
+      await assert.rejects(auth.refresh(laptop.refreshToken), rejectsWith('TOKEN_INVALID'));
+    });
+
+    it('leaves a login made afterwards working', async () => {
+      await auth.logoutAll('u1');
+      const { refreshToken } = await login();
+
+      await assert.doesNotReject(auth.refresh(refreshToken));
+    });
+
+    it('also ends a login that had read the user before it ran', async () => {
+      // login() has read the user and is still hashing when logoutAll runs.
+      const pending = login();
+      await auth.logoutAll('u1');
+      const { refreshToken } = await pending;
+
+      await assert.rejects(auth.refresh(refreshToken), rejectsWith('TOKEN_INVALID'));
+    });
+
+    it('revokes the family once refused, so it stays refused', async () => {
+      const { refreshToken } = await login();
+      await auth.logoutAll('u1');
+      await assert.rejects(auth.refresh(refreshToken));
+
+      users.set('u1', { ...user(), sessionVersion: 0 });
+      await assert.rejects(auth.refresh(refreshToken), rejectsWith('TOKEN_INVALID'));
+    });
+
+    it('succeeds for an account that no longer exists', async () => {
+      users.clear();
+      await assert.doesNotReject(auth.logoutAll('u1'));
+    });
+  });
+
+  describe('changePassword', () => {
+    const NEW_PASSWORD = 'battery-staple-2';
+    const change = (currentPassword = PASSWORD, newPassword = NEW_PASSWORD) =>
+      auth.changePassword('u1', { currentPassword, newPassword });
+    const forbidden = (err: unknown) =>
+      err instanceof ForbiddenError && err.code === 'INVALID_CREDENTIALS';
+
+    it('returns a working pair and ends every other session', async () => {
+      const other = await login();
+
+      const tokens = await change();
+
+      await assert.doesNotReject(auth.refresh(tokens.refreshToken));
+      await assert.rejects(auth.refresh(other.refreshToken), rejectsWith('TOKEN_INVALID'));
+    });
+
+    it('replaces the password used to log in', async () => {
+      await change();
+
+      await assert.rejects(login(), rejectsWith('INVALID_CREDENTIALS'));
+      await assert.doesNotReject(auth.login({ email: 'ada@example.com', password: NEW_PASSWORD }));
+    });
+
+    it('refuses a wrong current password with a 403, changing nothing', async () => {
+      const other = await login();
+
+      await assert.rejects(change('wrong-password-0'), forbidden);
+
+      await assert.doesNotReject(login());
+      await assert.doesNotReject(auth.refresh(other.refreshToken));
+    });
+
+    it('lets one of two simultaneous changes win; the other is refused', async () => {
+      const results = await Promise.allSettled([
+        change(PASSWORD, 'first-new-pass-1'),
+        change(PASSWORD, 'second-new-pass-2'),
+      ]);
+
+      assert.deepEqual(results.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+      assert.ok(forbidden(results.find((r) => r.status === 'rejected')!.reason));
+    });
+
+    it('answers 401 TOKEN_INVALID when the account no longer exists', async () => {
+      users.clear();
+      await assert.rejects(change(), rejectsWith('TOKEN_INVALID'));
     });
   });
 });

@@ -55,7 +55,7 @@ app.ts                    the route tree: /health, then / (global limit + timeou
 └── api/index.ts          express.json(), then unversioned modules, then each version
     ├── docs.routes.ts    /docs/openapi.json
     └── v1/index.ts       /v1, then each module
-        ├── auth.routes.ts /auth/login, /auth/refresh, /auth/logout
+        ├── auth.routes.ts /auth/login, /refresh, /logout, /logout-all, /password
         └── user.routes.ts /user/register, /user/me
 ```
 

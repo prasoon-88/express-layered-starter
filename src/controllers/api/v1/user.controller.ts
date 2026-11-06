@@ -3,14 +3,14 @@ import { route } from '#lib/http/route.lib';
 import REGEX from '#constants/regex.constant';
 import HTTP_STATUS from '#constants/http/httpStatus.constant';
 import { USER_ROLES } from '#constants/user.constant';
+import { newPasswordSchema } from '#schemas/user.schema';
 import type { UserService } from '#services/user.service';
 
 // Endpoint-only schemas: they stay here until a second file needs them.
 const registerBody = z.strictObject({
   fullName: z.string().trim().min(1).max(100),
   email: z.string().trim().toLowerCase().pipe(z.email()),
-  // Capped because hashing cost grows with input, and an uncapped field is a cheap way to burn CPU.
-  password: z.string().min(8).max(128),
+  password: newPasswordSchema,
 });
 
 // Never the hash: only these fields ever leave the server.

@@ -3,6 +3,8 @@ export interface NewRefreshToken {
   userId: string;
   /** Every token rotated from one login shares the family; reuse or logout revokes all of it. */
   familyId: string;
+  /** The user's sessionVersion when it was issued; refresh refuses it once the user's is higher. */
+  sessionVersion: number;
   /** sha256 of the secret half. The secret itself is never stored. */
   hash: string;
   /** Milliseconds since the epoch. */

@@ -37,6 +37,19 @@ export const authRoutes = ({ authController, limit }: AuthRoutesDeps) => {
         },
         handlers: [credentialLimit(), authController.logout],
       }),
+      defineRoute({
+        method: 'post',
+        path: '/logout-all',
+        access: { strategy: 'authenticated' },
+        handlers: [authController.logoutAll],
+      }),
+      defineRoute({
+        method: 'post',
+        path: '/password',
+        access: { strategy: 'authenticated' },
+        // A wrong current password counts, so a stolen access token cannot be used to guess it.
+        handlers: [credentialLimit(), authController.changePassword],
+      }),
     ],
     { use: [noStore] },
   );

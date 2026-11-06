@@ -22,7 +22,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --conditions=app-source --test \"src/**/*.test.ts\"",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test && pnpm run build"
+    "test:coverage": "node --conditions=app-source --test --experimental-test-coverage --test-coverage-include-all --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/*.test.ts\" --test-coverage-exclude=\"src/**/*.d.ts\" --test-coverage-exclude=\"src/testing/**\" --test-coverage-lines=95 --test-coverage-branches=88 --test-coverage-functions=88 \"src/**/*.test.ts\"",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run build"
   },
   "author": "Prasoon Asati",
   "license": "ISC",

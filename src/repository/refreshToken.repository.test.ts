@@ -20,6 +20,8 @@ const token = (id: string, familyId = 'f1', ttlMs = 60_000): NewRefreshToken => 
   id,
   userId: 'u1',
   familyId,
+  // Not 0, so a store that loses the field and defaults it fails the round-trip test.
+  sessionVersion: 2,
   hash: `hash-${id}`,
   expiresAt: Date.now() + ttlMs,
 });
