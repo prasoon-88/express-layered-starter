@@ -210,6 +210,18 @@ Whoever creates a dependency builds its check and passes it to `createApp({ read
 - **RESP2, on purpose.** node-redis 6 defaults to RESP3, whose `HELLO` handshake Redis older than 6 rejects. Nothing here needs RESP3.
 - **`closeRedisClient` handles both states.** A ready client is closed after its in-flight commands finish. One that never connected, or is between reconnects, has nothing to flush and is destroyed at once, so shutdown never waits on a connection that is not there.
 
+### `telemetry/`
+
+The OpenTelemetry SDK, started by the preload [`src/instrumentation.ts`](../instrumentation.ts) before the app is imported. What it records and how to configure it is in the root [README](../../README.md#observability).
+
+- [`index.ts`](telemetry/index.ts): `startTelemetry()` builds the SDK from [`telemetryConfig`](../config/telemetry.config.ts) and the instrumentation list (HTTP, Express, Redis, pino, Node runtime). It is the only file that imports the SDK, and only the preload imports it, so a process with telemetry off loads none of it.
+- [`state.ts`](telemetry/state.ts): `isTelemetryStarted()` and `shutdownTelemetry()`, which import no SDK. `server.ts` uses the first to warn when a destination is set but the preload was not, and runs the second as its last shutdown hook, so the spans of the drained requests are flushed.
+
+Lint enforces the split: outside this folder and the preload, the only OpenTelemetry package a file may import is `@opentelemetry/api`, which records nothing until the SDK runs. Code that adds its own spans or metrics uses that.
+
+- **Instrumentation must be loaded before what it patches.** A module imported before the SDK started is not traced, which is why this cannot be started from `server.ts`. An instrumentation added to the list also needs its package to be imported after the preload, which every app module is.
+- **Each instrumentation's options are a choice about data.** The Redis serializer records the command name only, because arguments hold token ids and client IPs; replace it with care. The end-to-end test in [`index.test.ts`](telemetry/index.test.ts) fails if a password, refresh token or token id appears in what is exported.
+
 ## Adding a client
 
 Export something configured and ready to use. Read settings from `config/`, never from `process.env` directly:

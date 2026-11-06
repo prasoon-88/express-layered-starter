@@ -47,4 +47,5 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 8000) + '/health/live', { signal: AbortSignal.timeout(2000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 
 # Node runs as PID 1 itself (no npm/pnpm wrapper), so SIGTERM reaches server.ts, which drains and exits.
-CMD ["node", "--enable-source-maps", "dist/server.js"]
+# The preload starts OpenTelemetry when an OTEL_* destination is set, and does nothing otherwise.
+CMD ["node", "--enable-source-maps", "--import", "./dist/instrumentation.js", "dist/server.js"]

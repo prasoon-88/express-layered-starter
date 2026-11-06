@@ -7,8 +7,16 @@ import { createHttpServer } from '#lib/http/createHttpServer';
 import { registerProcessHandler } from '#lib/lifecycle/index';
 import { closeRedisClient, createRedisClient } from '#lib/redis/index';
 import type { ReadinessCheck } from '#lib/health/index';
+import { telemetryConfig } from '#config/telemetry.config';
+import { isTelemetryStarted, shutdownTelemetry } from '#lib/telemetry/state';
 
 const logger = getLogger('server');
+
+// Started by the preload, never from here: by now express and http are loaded, too late to patch.
+if (telemetryConfig.enabled && !isTelemetryStarted())
+  logger.warn(
+    'OpenTelemetry is configured but was not started: run with `--import ./dist/instrumentation.js` (pnpm start does)',
+  );
 
 const authUsesRedis = ENV_CONSTANTS.AUTH_STORE === 'redis';
 const sharesRedis =
@@ -62,5 +70,7 @@ registerProcessHandler({
     async () => {
       if (redis) await closeRedisClient(redis);
     },
+    // Last, so the spans of everything above are in the final export.
+    () => shutdownTelemetry(),
   ],
 });

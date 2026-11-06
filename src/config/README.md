@@ -26,6 +26,8 @@ your code                 never touches process.env directly
 
 Note the extra step: **`constants/env/` is the only place in the app that reads `process.env`.** Config files import from it rather than reaching for the environment themselves, so every variable has exactly one declared default and one place to look it up.
 
+**The one exception is OpenTelemetry's `OTEL_*` variables.** They are a cross-language standard, and the SDK reads and validates them itself, so declaring them in the app's schema would give each one two parsers that could disagree. [`telemetry.config.ts`](telemetry.config.ts) reads them only to decide whether a destination is set, through `resolveTelemetryConfig(env, service)`, which takes the environment as an argument and is tested with plain objects.
+
 ## Example
 ```js
 // config/mailer.config.ts

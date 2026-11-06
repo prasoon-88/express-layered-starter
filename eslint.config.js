@@ -64,6 +64,23 @@ const aliasPatterns = (layer) => {
   };
 };
 
+// Both static `import` and `await import()`, for each restricted source.
+const restrictImports = (sourceRegex, message) =>
+  ['ImportDeclaration', 'ImportExpression'].map((node) => ({
+    selector: `${node}[source.value=/${sourceRegex}/]`,
+    message,
+  }));
+
+const noTestingImports = restrictImports(
+  '^#testing\\u002F',
+  '#testing/* is for *.test.ts files only; it is not part of the build.',
+);
+
+const noTelemetrySdkImports = restrictImports(
+  '^(@opentelemetry\\u002F(?!api$)|import-in-the-middle)',
+  'Only src/lib/telemetry and src/instrumentation.ts load the OpenTelemetry SDK. Use @opentelemetry/api.',
+);
+
 const layerConfigs = LAYERS.map((layer) => ({
   files: [`src/${layer}/**/*.ts`],
   rules: {
@@ -131,22 +148,21 @@ export default defineConfig([
   ...layerConfigs,
 
   // Test helpers are not built into dist/, so production code importing one would crash at boot.
-  // A separate rule from no-restricted-imports, so the per-layer configs above don't replace it.
+  // The OpenTelemetry SDK is started by the preload only; app code uses @opentelemetry/api,
+  // which does nothing until the SDK runs. A separate rule from no-restricted-imports, so the
+  // per-layer configs above don't replace it.
   {
     files: ['src/**/*.ts'],
     ignores: ['src/**/*.test.ts', 'src/testing/**'],
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'ImportDeclaration[source.value=/^#testing\\u002F/]',
-          message: '#testing/* is for *.test.ts files only; it is not part of the build.',
-        },
-        {
-          selector: 'ImportExpression[source.value=/^#testing\\u002F/]',
-          message: '#testing/* is for *.test.ts files only; it is not part of the build.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...noTestingImports, ...noTelemetrySdkImports],
+    },
+  },
+  {
+    files: ['src/lib/telemetry/**/*.ts', 'src/instrumentation.ts'],
+    ignores: ['src/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...noTestingImports],
     },
   },
 

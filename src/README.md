@@ -166,6 +166,10 @@ rateLimiter/ ← uses constants, config, lib, utils, errors, schemas. Nothing im
 idempotency/   except the entry files: server.ts builds them, app.ts registers their
                middleware factories in the container (`limit`, `idempotent`), and route
                files receive them as arguments.
+
+instrumentation.ts ← the preload (`--import`): config + lib/telemetry, before anything above
+                     loads. Only it and lib/telemetry/ may import the OpenTelemetry SDK; any
+                     layer may import `@opentelemetry/api` to add spans.
 ```
 
 **Dependencies point downward only.** A lower layer must never import an upper layer (e.g. a service never imports a controller) — that creates circular dependencies and breaks reusability.

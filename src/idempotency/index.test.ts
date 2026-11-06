@@ -8,7 +8,7 @@ import { parseEnv } from '#constants/env/schema';
 import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
 import { ServiceUnavailableError } from '#errors';
 import { closeRedisClient, createRedisClient } from '#lib/redis/index';
-import { freePort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
+import { freePort, holdDeadPort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
 import { initIdempotency } from './index.ts';
 
 const log = pino({ level: 'silent' });
@@ -112,7 +112,7 @@ describe('initIdempotency with the Redis store', { skip }, () => {
   });
 
   it('answers 503 when the store is down and the mode is deny', async () => {
-    const port = await freePort();
+    const { port } = await holdDeadPort();
     const env = buildEnv(port);
     const url = env.REDIS_URL;
     assert.ok(url);

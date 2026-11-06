@@ -25,6 +25,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Auth: login, short-lived JWT access tokens, rotating refresh tokens with reuse detection, logout | [Authentication](#authentication) · [`auth.service.ts`](src/services/auth.service.ts) · [`authenticate.middleware.ts`](src/middlewares/authenticate.middleware.ts) |
 | OpenAPI 3.1 document at `GET /api/docs/openapi.json`, generated from the mounted routes and their Zod schemas | [OpenAPI](#openapi) · [`openapi.lib.ts`](src/lib/http/openapi.lib.ts) |
 | Docker image (multi-stage, non-root, healthcheck) and a Compose file with Redis | [Docker](#docker) · [`Dockerfile`](Dockerfile) · [`compose.yaml`](compose.yaml) |
+| OpenTelemetry traces and metrics over OTLP (HTTP, Express, Redis), off until an endpoint is set; trace ids in every log line; Jaeger in Compose | [Observability](#observability) · [`lib/telemetry/`](src/lib/telemetry/) · [`instrumentation.ts`](src/instrumentation.ts) |
 | A working end-to-end endpoint to copy: `POST /api/v1/user/register` | [`user.controller.ts`](src/controllers/api/v1/user.controller.ts) · [`user.service.ts`](src/services/user.service.ts) |
 | Security headers, static serving, proxy-aware client IPs | [`app.ts`](src/app.ts) (`helmet`, `express.static`, `trust proxy`) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
@@ -97,7 +98,7 @@ Node strips the types and runs `src/*.ts` as-is, so **dev never type-checks**. Y
 
 ```bash
 pnpm build   # type-check + compile src/ -> dist/, and copy the EJS templates (no output at all if any type error)
-pnpm start   # node dist/server.js
+pnpm start   # node --import ./dist/instrumentation.js dist/server.js
 ```
 
 `dist/` is self-contained next to `public/`, `node_modules/` and `package.json` (Node resolves the `#imports` map from it): it does not read `src/`. CI proves it by deleting `src/` before the smoke test.
@@ -128,6 +129,15 @@ The [`Dockerfile`](Dockerfile) has three build stages and ships only the last:
 - **The `HEALTHCHECK` probes `/health/live`**, with Node's `fetch` (Alpine has no curl). Liveness and not readiness, because Docker and Swarm restart an unhealthy container, and a restart cannot fix a Redis outage. Point the load balancer, or the Kubernetes readiness probe, at `/health/ready`.
 - **Secrets never enter the build.** [`.dockerignore`](.dockerignore) excludes `.env*`, along with `node_modules`, `dist` and `.git`. Pass `JWT_SECRET` and `REDIS_URL` at run time.
 - **Redis keeps an append-only file** on the `redis-data` volume, so revoked sessions stay revoked across a Redis restart.
+
+To look at traces, start Jaeger with the opt-in `observability` profile and point the app at it (see [Observability](#observability)):
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318 OTEL_METRICS_EXPORTER=none \
+  JWT_SECRET=<at least 32 characters> docker compose --profile observability up --build --wait
+```
+
+The Jaeger UI is on `http://localhost:16686`. Without the profile, Jaeger does not start, and the two variables stay empty, which leaves telemetry off.
 
 CI builds the image, starts the stack with `--wait`, and checks readiness, the OpenAPI document, a login and refresh stored in Redis, and that the process is not root ([`ci.yml`](.github/workflows/ci.yml), job `docker`).
 
@@ -188,6 +198,7 @@ express-layered-starter/
 └── src/
     ├── app.ts           # builds the Express app: container, route tree, middleware; no listen()
     ├── server.ts        # entry point — starts the HTTP server
+    ├── instrumentation.ts # preload (--import): starts OpenTelemetry before the app loads
     ├── config/          # tunable settings, derived from env
     ├── constants/       # fixed values that never change
     ├── contexts/        # AsyncLocalStorage — request-scoped state
@@ -403,6 +414,46 @@ Liveness and readiness fail for different reasons and the platform reacts differ
 
 In Kubernetes these map to the **startup**, **liveness** and **readiness** probes; set `SHUTDOWN_DELAY_MS` longer than the readiness probe interval so the drain outlasts one failed probe. The per-platform numbers are in [`src/lib/README.md`](src/lib/README.md#lifecycle).
 
+## Observability
+
+[OpenTelemetry](https://opentelemetry.io/) traces and metrics, exported over OTLP/HTTP to any collector or backend (Jaeger, Grafana Tempo, Honeycomb, Datadog, an OpenTelemetry Collector). **It is off until a destination is set**, so a fresh clone sends nothing and logs no export errors:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm dev
+```
+
+Everything else uses OpenTelemetry's [standard variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/), read by the SDK itself: `OTEL_EXPORTER_OTLP_HEADERS` for an API key, `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG` for sampling, `OTEL_SERVICE_NAME` and `OTEL_RESOURCE_ATTRIBUTES` for the resource, a per-signal `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `_METRICS_ENDPOINT`, `OTEL_TRACES_EXPORTER=console` while debugging. `OTEL_METRICS_EXPORTER=none` (or `OTEL_TRACES_EXPORTER=none`) switches one signal off, and `OTEL_SDK_DISABLED=true` both.
+
+| Signal | What is recorded |
+|--------|------------------|
+| Traces | one server span per request, named by its route (`POST /api/v1/auth/login`), with `http.route`, the status and `app.request_id`; the Express handler span under it; a client span per Redis command and per outgoing `node:http` request. An incoming `traceparent` is continued |
+| Metrics | the `http.server.request.duration` histogram by route and status; Node runtime metrics (event loop, heap, GC) |
+| Logs | stay on stdout as before. Inside a traced request each line gains `trace_id`, `span_id` and `trace_flags`, so a log search finds the trace and the trace finds its logs |
+
+**How it is wired**
+
+The SDK has to patch `http`, `express` and `@redis/client` before the app imports them, and in an ES module app every `import` is resolved before any code runs. So it starts from a preload, [`src/instrumentation.ts`](src/instrumentation.ts), passed with `--import`: `pnpm dev`, `pnpm start` and the Docker image already do. It registers the ES module hook ([`import-in-the-middle`](https://github.com/nodejs/import-in-the-middle), through Node's synchronous `module.registerHooks()`, so no deprecation warning) and starts the SDK, only when telemetry is on; otherwise it loads none of it. A process started without the preload while a destination is set logs a warning at boot instead of silently tracing nothing.
+
+The SDK lives in [`lib/telemetry/`](src/lib/telemetry/), and lint keeps it there: any other file may import only `@opentelemetry/api`, which does nothing until the SDK runs. To add a span of your own:
+
+```ts
+import { trace } from '@opentelemetry/api'
+
+const tracer = trace.getTracer('billing.service')
+await tracer.startActiveSpan('charge', async (span) => {
+    try { return await charge() } finally { span.end() }
+})
+```
+
+**Behaviors worth knowing**
+
+- **No secret is exported.** Redis spans record the command name only (`EVAL`, `HGETALL`), never its arguments, which hold token ids, client IPs and idempotency bodies. HTTP spans carry no body and no header beyond the standard ones. An end-to-end test logs in through a traced app and checks that no password, refresh token or token id appears anywhere in what it exported.
+- **`fetch` is not instrumented.** It runs on undici, not `node:http`, and the template makes no outgoing calls. A service that calls others with `fetch` adds [`@opentelemetry/instrumentation-undici`](https://www.npmjs.com/package/@opentelemetry/instrumentation-undici) to the list in [`lib/telemetry/index.ts`](src/lib/telemetry/index.ts), which also sends `traceparent` downstream.
+- **`/health` is not traced**: probes arrive every few seconds and say nothing about users. Background Redis commands (the rate limit policy refresh, connection checks) are not traced either, since each would be a trace of its own.
+- **Middleware gets no span each.** Express middleware and nested routers would add about 15 spans per request, mostly named `<anonymous>`. Their time shows as the gap under the HTTP span, and the Redis calls they make (rate limiting, idempotency) appear as its children.
+- **Shutdown flushes.** The SDK shuts down last, after the HTTP server has drained, so the spans of the last requests are exported before the process exits, within `SHUTDOWN_TIMEOUT_MS`.
+- **A slow or absent backend never slows a request.** Spans are batched and exported in the background; when the backend is down they are dropped, not queued against the request.
+
 ## Conventions
 
 - **ES Modules** — use `import` / `export`. Relative imports include the `.ts` extension (`./app.error.ts`).
@@ -416,11 +467,11 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 
 | Command | What it does |
 |---------|--------------|
-| `pnpm dev` | Run `src/*.ts` directly with `.env` loaded and auto-restart on changes (no type-check) |
+| `pnpm dev` | Run `src/*.ts` directly with `.env` loaded and auto-restart on changes (no type-check), with the telemetry preload |
 | `pnpm typecheck` | Type-check the whole project with `tsc` (no output) |
 | `pnpm typecheck:watch` | Same, re-running on every save |
 | `pnpm build` | Clean `dist/`, then compile with `tsconfig.build.json` — fails on any type error |
-| `pnpm start` | Run the compiled `dist/server.js` (expects env from the environment) |
+| `pnpm start` | Run the compiled `dist/server.js` with the telemetry preload (expects env from the environment) |
 | `pnpm lint` | ESLint (type-aware rules + layered-import enforcement) |
 | `pnpm format` | Rewrite files with Prettier |
 | `pnpm format:check` | Verify formatting without writing |
@@ -448,6 +499,7 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [x] Refresh tokens in memory or Redis, behind one contract test
 - [x] OpenAPI 3.1 document generated from the route table
 - [x] Docker image and Compose file with Redis
+- [x] OpenTelemetry traces and metrics, trace ids in logs, Jaeger in Compose
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
 - [x] Tests: unit tests plus real HTTP tests against a listening app (Node's test runner and `fetch`, no extra framework); Redis integration tests in CI

@@ -5,7 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import pino from 'pino';
 import { AppError } from '#errors';
 import { closeRedisClient, createRedisClient, type Redis } from '#lib/redis/index';
-import { freePort, redisSkip, startRedisServer } from '#testing/redisServer';
+import { freePort, holdDeadPort, redisSkip, startRedisServer } from '#testing/redisServer';
 import {
   createRefreshTokenRepository,
   type NewRefreshToken,
@@ -148,7 +148,8 @@ describe('refreshTokenRepository (redis)', { skip: redisSkip }, () => {
   });
 
   it('answers 503 when Redis is unreachable, instead of a 500', async () => {
-    const down = await createRedisClient(`redis://127.0.0.1:${await freePort()}`, log, {
+    const { port: deadPort } = await holdDeadPort();
+    const down = await createRedisClient(`redis://127.0.0.1:${deadPort}`, log, {
       connectTimeoutMs: 200,
     });
     try {

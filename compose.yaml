@@ -19,6 +19,11 @@ services:
       IDEMPOTENCY_STORE: redis
       # Published straight to the host, no proxy in front, so there is nothing to trust.
       TRUST_PROXY: 'false'
+      # Empty by default, which leaves OpenTelemetry off. To send traces to the Jaeger below:
+      #   OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318 OTEL_METRICS_EXPORTER=none \
+      #     docker compose --profile observability up --build --wait
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -38,6 +43,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+
+  # Started only with `--profile observability`. Trace UI on http://localhost:16686, OTLP/HTTP on
+  # 4318 (also published, for `pnpm dev` on the host). Jaeger stores traces in memory and takes
+  # no metrics, hence OTEL_METRICS_EXPORTER=none above. The app does not depend on it: spans
+  # exported before it is up are dropped, never queued against the request.
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    profiles: [observability]
+    ports:
+      - '16686:16686'
+      - '4318:4318'
     restart: unless-stopped
 
 volumes:

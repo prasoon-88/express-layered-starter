@@ -6,7 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import pino from 'pino';
 import { parseEnv } from '#constants/env/schema';
 import { ServiceUnavailableError, TooManyRequestsError } from '#errors';
-import { freePort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
+import { freePort, holdDeadPort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
 import { initRateLimit } from './index.ts';
 
 // These tests run against a real redis-server, so they prove the limiter really shares state
@@ -81,7 +81,8 @@ describe('initRateLimit with the Redis store', { skip }, () => {
   });
 
   it('boots without waiting forever for an unreachable Redis, then recovers when it comes up', async () => {
-    const port = await freePort();
+    const dead = await holdDeadPort();
+    const { port } = dead;
     const env = buildEnv(port);
 
     const startedAt = Date.now();
@@ -97,6 +98,7 @@ describe('initRateLimit with the Redis store', { skip }, () => {
       const fallback = await hit(limiter, '203.0.113.11');
       assert.equal(fallback.passed, true, 'local mode keeps limiting from memory');
 
+      await dead.release();
       await startRedisServer(port);
       await waitFor(() => check.run(), 10_000);
     } finally {
@@ -105,7 +107,7 @@ describe('initRateLimit with the Redis store', { skip }, () => {
   });
 
   it('answers 503, not 429, when the store is down and the mode is deny', async () => {
-    const port = await freePort();
+    const { port } = await holdDeadPort();
     const limiter = await initRateLimit(buildEnv(port, { RATE_LIMIT_ON_STORE_ERROR: 'deny' }), log);
     try {
       await assert.rejects(hit(limiter, '203.0.113.12'), ServiceUnavailableError);
@@ -116,7 +118,7 @@ describe('initRateLimit with the Redis store', { skip }, () => {
   });
 
   it('lets the request through without rate limit headers when the store is down and the mode is allow', async () => {
-    const port = await freePort();
+    const { port } = await holdDeadPort();
     const limiter = await initRateLimit(
       buildEnv(port, { RATE_LIMIT_ON_STORE_ERROR: 'allow' }),
       log,
