@@ -7,6 +7,7 @@ import type { AccessTokens } from '#lib/auth/accessToken';
 import { getLogger } from '#lib/logger/index';
 import type { RefreshTokenRepository } from '#repository/refreshToken.repository';
 import type { StoredUser, UserRepository } from '#repository/user.repository';
+import { concatenateStrings } from '#utils/concateStrings';
 import { hashPassword, verifyPassword } from '#utils/password.util';
 
 const logger = getLogger('auth.service');
@@ -91,7 +92,7 @@ export const createAuthService = ({
     const access = accessTokens.sign({ sub: user.id, email: user.email, role: user.role });
     return {
       accessToken: access.token,
-      refreshToken: `${id}.${secret}`,
+      refreshToken: concatenateStrings([id, secret], '.'),
       tokenType: TOKEN_TYPE,
       expiresIn: access.expiresIn,
     };

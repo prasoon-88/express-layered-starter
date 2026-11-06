@@ -9,6 +9,7 @@ import {
 import { createRedisRefreshTokenRepository } from '#repository/refreshToken.redis.repository';
 import { authRoutes } from '#routes/api/v1/auth.routes';
 import { createAuthService, type AuthService } from '#services/auth.service';
+import { concatenateStrings } from '#utils/concateStrings';
 
 declare module '#http/registry' {
   interface Registry {
@@ -40,7 +41,7 @@ export const authModule = defineModule({
       if (env.AUTH_STORE === 'memory') return createRefreshTokenRepository();
       return createRedisRefreshTokenRepository({
         redis: get('redis'),
-        prefix: `${env.SERVICE_NAME}:auth`,
+        prefix: concatenateStrings([env.SERVICE_NAME, 'auth'], ':'),
         familyTtlMs: env.JWT_REFRESH_TTL_S * 1000,
       });
     },

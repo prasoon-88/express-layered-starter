@@ -1,4 +1,5 @@
 import type { MessageFormatFunc, PrettyOptions } from 'pino-pretty';
+import { concatenateStrings } from '#utils/concateStrings';
 
 type Colors = Parameters<MessageFormatFunc>[3]['colors'];
 
@@ -49,17 +50,22 @@ const messageFormat: MessageFormatFunc = (log, messageKey, levelLabel, { colors 
       const status = Number(log.status);
       const paint = getPaint(status, colors);
       const timing = log.slow ? colors.yellow : colors.gray;
-      const flags = [
-        log.aborted ? colors.red('ABORTED') : '',
-        typeof log.errorCode === 'string' ? colors.red(log.errorCode) : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      return `${id} ${colors.bold(String(log.method))} ${String(log.path)} ${paint(status)} ${timing(`${String(log.durationMs)}ms`)}${flags ? ' ' + flags : ''}`;
+      return concatenateStrings(
+        [
+          id,
+          colors.bold(String(log.method)),
+          String(log.path),
+          paint(status),
+          timing(`${String(log.durationMs)}ms`),
+          log.aborted ? colors.red('ABORTED') : '',
+          typeof log.errorCode === 'string' ? colors.red(log.errorCode) : '',
+        ],
+        ' ',
+      );
     }
     default: {
-      const mod = typeof log.module === 'string' ? colors.magenta(`(${log.module}) `) : '';
-      return `${id} ${mod} ${String(log[messageKey])}`;
+      const mod = typeof log.module === 'string' ? colors.magenta(`(${log.module})`) : '';
+      return concatenateStrings([id, mod, String(log[messageKey])], ' ');
     }
   }
 };
@@ -74,7 +80,7 @@ export const createPrettyStream = async ({
     sync: true,
     destination,
     translateTime: 'HH:MM:ss.l',
-    ignore: HIDDEN_FIELDS.join(','),
+    ignore: concatenateStrings(HIDDEN_FIELDS, ','),
     customColors: CUSTOMIZE_COLOR,
     messageFormat,
   });

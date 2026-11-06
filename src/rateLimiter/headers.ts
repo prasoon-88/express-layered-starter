@@ -1,4 +1,5 @@
 import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { concatenateStrings } from '#utils/concateStrings';
 import type { Decision } from './types.ts';
 
 // IETF draft-ietf-httpapi-ratelimit-headers-07: `RateLimit-Policy: 100;w=60` and
@@ -9,6 +10,9 @@ export const rateLimitHeaders = ({
   windowS,
   resetMs,
 }: Pick<Decision, 'limit' | 'remaining' | 'windowS' | 'resetMs'>) => ({
-  [HTTP_HEADERS.RATE_LIMIT_POLICY]: `${limit};w=${windowS}`,
-  [HTTP_HEADERS.RATE_LIMIT]: `limit=${limit}, remaining=${remaining}, reset=${Math.ceil(resetMs / 1000)}`,
+  [HTTP_HEADERS.RATE_LIMIT_POLICY]: concatenateStrings([limit, `w=${windowS}`], ';'),
+  [HTTP_HEADERS.RATE_LIMIT]: concatenateStrings(
+    [`limit=${limit}`, `remaining=${remaining}`, `reset=${Math.ceil(resetMs / 1000)}`],
+    ', ',
+  ),
 });

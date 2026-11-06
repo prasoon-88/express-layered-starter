@@ -1,5 +1,6 @@
 import { ServiceUnavailableError } from '#errors';
 import type { Redis } from '#lib/redis/index';
+import { concatenateStrings } from '#utils/concateStrings';
 import type {
   NewRefreshToken,
   RefreshTokenRepository,
@@ -41,8 +42,8 @@ export const createRedisRefreshTokenRepository = ({
   prefix,
   familyTtlMs,
 }: RedisRefreshTokenOptions): RefreshTokenRepository => {
-  const tokenKey = (id: string) => `${prefix}:rt:${id}`;
-  const familyKey = (familyId: string) => `${prefix}:rtf:${familyId}`;
+  const tokenKey = (id: string) => concatenateStrings([prefix, 'rt', id], ':');
+  const familyKey = (familyId: string) => concatenateStrings([prefix, 'rtf', familyId], ':');
 
   const create = (data: NewRefreshToken) =>
     guard(async () => {

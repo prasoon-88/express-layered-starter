@@ -1,5 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { concatenateStrings } from './concateStrings.ts';
 
 const scryptAsync = promisify(scrypt) as (
   password: string,
@@ -14,7 +15,7 @@ const KEY_BYTES = 64;
 export const hashPassword = async (password: string) => {
   const salt = randomBytes(SALT_BYTES);
   const key = await scryptAsync(password, salt, KEY_BYTES);
-  return `${salt.toString('hex')}:${key.toString('hex')}`;
+  return concatenateStrings([salt.toString('hex'), key.toString('hex')], ':');
 };
 
 export const verifyPassword = async (password: string, stored: string) => {

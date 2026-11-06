@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { z, type ZodType } from 'zod';
 import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { concatenateStrings } from '#utils/concateStrings';
 import { getRouteContract } from './route.lib.ts';
 
 // Everything here is derived from the route table and the `route()` schemas, which are what the
@@ -60,25 +61,22 @@ const successEnvelope = (data: JsonSchema) => ({
   required: ['success', 'message', 'data', 'requestId'],
 });
 
-const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+const capitalize = (word: string) =>
+  concatenateStrings([word.charAt(0).toUpperCase(), word.slice(1)]);
 
 // `POST /api/v1/auth/login` → `postApiV1AuthLogin`, `GET /users/:id` → `getUsersById`.
 // Unique, because mount refuses two routes with the same method and path.
 const operationId = (method: string, path: string) =>
-  method.toLowerCase() +
-  path
-    .split('/')
-    .filter(Boolean)
-    .map((segment) =>
-      segment.startsWith(':')
-        ? `By${capitalize(segment.slice(1))}`
-        : segment
-            .split(/[^A-Za-z0-9]+/)
-            .filter(Boolean)
-            .map(capitalize)
-            .join(''),
-    )
-    .join('');
+  concatenateStrings([
+    method.toLowerCase(),
+    ...path
+      .split('/')
+      .map((segment) =>
+        segment.startsWith(':')
+          ? concatenateStrings(['By', capitalize(segment.slice(1))])
+          : concatenateStrings(segment.split(/[^A-Za-z0-9]+/).map(capitalize)),
+      ),
+  ]);
 
 const PARAM = /:([A-Za-z_$][A-Za-z0-9_$]*)/g;
 
@@ -162,7 +160,9 @@ export const buildOpenApiDocument = ({ title, version, routes }: OpenApiOptions)
     const operation = {
       operationId: operationId(route.method, route.path),
       ...(route.module && { tags: [route.module] }),
-      ...(roles?.length && { description: `Requires one of the roles: ${roles.join(', ')}.` }),
+      ...(roles?.length && {
+        description: `Requires one of the roles: ${concatenateStrings(roles, ', ')}.`,
+      }),
       // An empty list overrides any default: this operation needs no credentials.
       security: isPublic ? [] : [{ [SECURITY_SCHEME]: [] }],
       ...(parameters.length && { parameters }),
