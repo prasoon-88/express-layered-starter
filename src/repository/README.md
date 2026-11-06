@@ -18,17 +18,21 @@ It isolates the database. If you switch MongoDB → PostgreSQL, **only this fold
 That isolation is why `main` ships without a database at all: this folder and [`models/`](../models/) are the only ones a database integration touches, so each one lives on its own branch (`mongodb`, …) and merges in cleanly.
 
 ## Example
-```js
+```ts
 // repository/post.repository.ts
 import Post from '#models/post.model'
 
-const create   = (data) => Post.create(data)
-const findById = (id)   => Post.findById(id)
-const findAll  = ()     => Post.find()
-const remove   = (id)   => Post.findByIdAndDelete(id)
+export const createPostRepository = () => ({
+  create:   (data: NewPost) => Post.create(data),
+  findById: (id: string)    => Post.findById(id),
+  findAll:  ()              => Post.find(),
+  remove:   (id: string)    => Post.findByIdAndDelete(id),
+})
 
-export default { create, findById, findAll, remove }
+export type PostRepository = ReturnType<typeof createPostRepository>
 ```
+
+A repository is a factory, like the layers above it. Anything configured at startup, such as a connection pool, is passed in as an argument, and each call owns its state. That is why the in-memory [`user.repository.ts`](user.repository.ts) gives every test and every app its own store.
 
 ## Pagination
 Repositories return raw rows and a count; [`Paginator`](../utils/paginator.util.ts) handles the arithmetic and the response meta:

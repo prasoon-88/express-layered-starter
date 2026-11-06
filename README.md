@@ -9,6 +9,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Capability | Where |
 |------------|-------|
 | Layered architecture with enforced dependency direction | [`src/README.md`](src/README.md) |
+| Route tree with a typed container: feature modules, a required access rule on every route, ordered middleware, boot-time checks for unreachable routes and wiring mistakes | [`src/http/`](src/http/) · [`src/modules/`](src/modules/) |
 | Request IDs, propagated without passing `req` around | [`contexts/`](src/contexts/) · [`requestId.middleware.ts`](src/middlewares/requestId.middleware.ts) |
 | Structured JSON logging with secret redaction | [`lib/logger/`](src/lib/logger/) · [`logger.config.ts`](src/config/logger.config.ts) |
 | HTTP access logs with duration + slow-request warnings | [`httpLogger.middleware.ts`](src/middlewares/httpLogger.middleware.ts) |
@@ -146,19 +147,22 @@ express-layered-starter/
 ├── tsconfig.build.json  # production build: src/ -> dist/
 ├── dist/                # compiled output (gitignored)
 └── src/
-    ├── app.ts           # builds the Express app — middleware + routes, no listen()
+    ├── app.ts           # builds the Express app: container, route tree, middleware; no listen()
     ├── server.ts        # entry point — starts the HTTP server
     ├── config/          # tunable settings, derived from env
     ├── constants/       # fixed values that never change
     ├── contexts/        # AsyncLocalStorage — request-scoped state
     ├── controllers/     # HTTP layer (req/res), calls services
     ├── errors/          # error classes + framework error converters
+    ├── http/            # container, route definitions, access strategies, mount()
+    ├── idempotency/     # Idempotency-Key replay (wired in server.ts and app.ts)
     ├── lib/             # wrappers around external systems (logger, process lifecycle, route())
     ├── middlewares/     # cross-cutting request concerns
     ├── models/          # data shapes / DB schemas
+    ├── modules/         # one per feature: wires repository → service → controller → routes
     ├── rateLimiter/     # request throttling: policies, store, headers (wired in server.ts and app.ts)
     ├── repository/      # database access only
-    ├── routes/          # URL → controller mapping
+    ├── routes/          # URL + access rule → middleware and controller
     ├── types/           # project-wide type augmentations (*.d.ts)
     ├── services/        # business logic, rules, orchestration
     ├── utils/           # small pure helpers
@@ -178,7 +182,7 @@ static files,  /health                   (answered here: never rate limited, nev
    ↓
 rateLimiter  →  requestTimeout           (everything below is limited and time-boxed)
    ↓
-routes/        which URL → which controller
+routes/        which URL → pre → access (authenticate, authorize) → handlers → controller
    ↓
 controllers/   read req, call service, send res          (HTTP only)
    ↓
@@ -286,7 +290,7 @@ Two endpoints the platform polls, plus a plain alias:
 | `GET /health/ready` | Should it receive traffic? | `200`, or `503` if a critical dependency is down | **`503`** |
 | `GET /health` | alias for `/ready` | same as `/ready` | `503` |
 
-They live in [`routes/health/`](src/routes/health/) and [`controllers/health/`](src/controllers/health/), mounted **first** in [`routes/index.ts`](src/routes/index.ts) and already in the logger's ignore list, so probes never clutter the access log.
+They live in [`routes/health/`](src/routes/health/) and [`controllers/health/`](src/controllers/health/), wired by [`modules/health.module.ts`](src/modules/health.module.ts), placed **first** in the route tree in [`app.ts`](src/app.ts) (outside the global rate limit and the request timeout), and already in the logger's ignore list, so probes never clutter the access log.
 
 ### Why two endpoints
 
@@ -339,7 +343,8 @@ In Kubernetes these map to the **startup**, **liveness** and **readiness** probe
 - [ ] CORS (when a cross-origin client needs it)
 - [x] Env validation (zod) — reject malformed values at boot
 - [x] Input validation at the controller boundary (`route()` + Zod)
-- [ ] Auth: register / login with JWT
+- [x] Required access rule on every route (`public` / `authenticated` / `roles`), `authorize` middleware
+- [ ] Auth: register / login with JWT (register `authenticate` in `app.ts`; see [`src/http/README.md`](src/http/README.md#access-rules))
 - [x] Health checks: liveness + readiness endpoints
 - [x] Graceful shutdown + `unhandledRejection` / `uncaughtException` handling
 - [ ] Tests — env schema covered; HTTP tests (`supertest`) next

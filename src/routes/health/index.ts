@@ -1,18 +1,32 @@
-import { Router } from 'express';
+import type { RequestHandler } from 'express';
 import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
-import type { HealthController } from '#controllers/health/index';
+import type { Registry } from '#http/registry';
+import { defineGroup, defineRoute } from '#http/routes';
 
-export const createHealthRouter = (healthController: HealthController) => {
-  const healthRouter = Router();
+const probe = { strategy: 'public', reason: 'Platform probes carry no credentials' } as const;
 
-  healthRouter.use((req, res, next) => {
-    res.set(HTTP_HEADERS.CACHE_CONTROL, 'no-store');
-    next();
-  });
-
-  healthRouter.get('/', healthController.ready);
-  healthRouter.get('/ready', healthController.ready);
-  healthRouter.get('/live', healthController.live);
-
-  return healthRouter;
+const noStore: RequestHandler = (_req, res, next) => {
+  res.set(HTTP_HEADERS.CACHE_CONTROL, 'no-store');
+  next();
 };
+
+export const healthRoutes = ({ healthController }: Pick<Registry, 'healthController'>) =>
+  defineGroup(
+    '/health',
+    [
+      defineRoute({ method: 'get', path: '/', access: probe, handlers: [healthController.ready] }),
+      defineRoute({
+        method: 'get',
+        path: '/ready',
+        access: probe,
+        handlers: [healthController.ready],
+      }),
+      defineRoute({
+        method: 'get',
+        path: '/live',
+        access: probe,
+        handlers: [healthController.live],
+      }),
+    ],
+    { use: [noStore] },
+  );

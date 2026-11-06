@@ -52,6 +52,10 @@
       "app-source": "./src/errors/*.ts",
       "default": "./dist/errors/*.js"
     },
+    "#http/*": {
+      "app-source": "./src/http/*.ts",
+      "default": "./dist/http/*.js"
+    },
     "#lib/*": {
       "app-source": "./src/lib/*.ts",
       "default": "./dist/lib/*.js"
@@ -64,9 +68,17 @@
       "app-source": "./src/models/*.ts",
       "default": "./dist/models/*.js"
     },
+    "#modules/*": {
+      "app-source": "./src/modules/*.ts",
+      "default": "./dist/modules/*.js"
+    },
     "#rateLimiter": {
       "app-source": "./src/rateLimiter/index.ts",
       "default": "./dist/rateLimiter/index.js"
+    },
+    "#idempotency": {
+      "app-source": "./src/idempotency/index.ts",
+      "default": "./dist/idempotency/index.js"
     },
     "#repository/*": {
       "app-source": "./src/repository/*.ts",

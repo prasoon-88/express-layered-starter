@@ -5,6 +5,15 @@ import {
 import { DEFAULT_CORS_METHODS, HTTP_METHODS } from '#constants/http/methods.constant';
 import { HTTP_KEEP_ALIVE_TIMEOUT_BUFFER_MS } from '#constants/http/server.constant';
 import {
+  DEFAULT_IDEMPOTENCY_LOCK_TTL_S,
+  DEFAULT_IDEMPOTENCY_MAX_BODY_BYTES,
+  DEFAULT_IDEMPOTENCY_STORE,
+  DEFAULT_IDEMPOTENCY_STORE_ERROR_MODE,
+  DEFAULT_IDEMPOTENCY_TTL_S,
+  IDEMPOTENCY_STORE_ERROR_MODES,
+  IDEMPOTENCY_STORES,
+} from '#constants/idempotency.constants';
+import {
   DEFAULT_RATE_LIMIT_AUTH_BLOCK_S,
   DEFAULT_RATE_LIMIT_AUTH_MAX,
   DEFAULT_RATE_LIMIT_AUTH_WINDOW_S,
@@ -164,6 +173,16 @@ const envSchema = z.preprocess(
       RATE_LIMIT_SKIP_PATHS: list
         .pipe(z.array(z.string().startsWith('/', 'Each path must start with "/"')))
         .default([...DEFAULT_RATE_LIMIT_SKIP_PATHS]),
+      IDEMPOTENCY_ENABLED: bool(true),
+      IDEMPOTENCY_STORE: z.enum(IDEMPOTENCY_STORES).default(DEFAULT_IDEMPOTENCY_STORE),
+      IDEMPOTENCY_ON_STORE_ERROR: z
+        .enum(IDEMPOTENCY_STORE_ERROR_MODES)
+        .default(DEFAULT_IDEMPOTENCY_STORE_ERROR_MODE),
+      IDEMPOTENCY_TTL_S: wholeNumber({ min: 1 }).default(DEFAULT_IDEMPOTENCY_TTL_S),
+      IDEMPOTENCY_LOCK_TTL_S: wholeNumber({ min: 1 }).default(DEFAULT_IDEMPOTENCY_LOCK_TTL_S),
+      IDEMPOTENCY_MAX_BODY_BYTES: wholeNumber({ min: 1 }).default(
+        DEFAULT_IDEMPOTENCY_MAX_BODY_BYTES,
+      ),
       LB_IDLE_TIMEOUT_MS: wholeNumber().default(60_000),
       HTTP_KEEP_ALIVE_TIMEOUT_MS: wholeNumber().default(65_000),
       HTTP_HEADERS_TIMEOUT_MS: wholeNumber().default(67_000),
@@ -208,6 +227,19 @@ const envSchema = z.preprocess(
         if (e.RATE_LIMIT_STORE === 'redis' && !e.REDIS_URL) {
           addIssue(['REDIS_URL'], 'Required when RATE_LIMIT_STORE=redis');
         }
+      }
+
+      if (e.IDEMPOTENCY_ENABLED) {
+        if (e.IDEMPOTENCY_STORE === 'redis' && !e.REDIS_URL)
+          addIssue(['REDIS_URL'], 'Required when IDEMPOTENCY_STORE=redis');
+
+        // The lock has to outlive the handler. Otherwise a slow request loses its key mid-flight
+        // and the retry is told the original is still in progress.
+        if (e.IDEMPOTENCY_LOCK_TTL_S * 1000 <= e.REQUEST_HANDLER_TIMEOUT_MS)
+          addIssue(
+            ['IDEMPOTENCY_LOCK_TTL_S'],
+            'must be greater than REQUEST_HANDLER_TIMEOUT_MS ( REQUEST_HANDLER_TIMEOUT_MS < IDEMPOTENCY_LOCK_TTL_S )',
+          );
       }
 
       if (e.HTTP_KEEP_ALIVE_TIMEOUT_MS <= e.LB_IDLE_TIMEOUT_MS)

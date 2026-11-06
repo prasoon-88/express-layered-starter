@@ -23,8 +23,8 @@ describe('parseEnv', () => {
         CORS_ORIGINS: [],
         CORS_CREDENTIALS: false,
         CORS_METHODS: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        CORS_ALLOWED_HEADERS: ['Content-Type', 'Authorization'],
-        CORS_EXPOSED_HEADERS: ['X-Request-Id'],
+        CORS_ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+        CORS_EXPOSED_HEADERS: ['X-Request-Id', 'Idempotent-Replayed'],
         CORS_MAX_AGE_S: 600,
         REDIS_CONNECT_TIMEOUT_MS: 5000,
         RATE_LIMIT_ENABLED: true,
@@ -38,6 +38,12 @@ describe('parseEnv', () => {
         RATE_LIMIT_IPV6_SUBNET: 56,
         RATE_LIMIT_POLICY_REFRESH_S: 30,
         RATE_LIMIT_SKIP_PATHS: [],
+        IDEMPOTENCY_ENABLED: true,
+        IDEMPOTENCY_STORE: 'memory',
+        IDEMPOTENCY_ON_STORE_ERROR: 'deny',
+        IDEMPOTENCY_TTL_S: 86_400,
+        IDEMPOTENCY_LOCK_TTL_S: 60,
+        IDEMPOTENCY_MAX_BODY_BYTES: 256 * 1024,
         LB_IDLE_TIMEOUT_MS: 60_000,
         HTTP_KEEP_ALIVE_TIMEOUT_MS: 65_000,
         HTTP_HEADERS_TIMEOUT_MS: 67_000,
@@ -160,6 +166,7 @@ describe('parseEnv', () => {
         LB_IDLE_TIMEOUT_MS: '0',
         REQUEST_HANDLER_TIMEOUT_MS: '300000',
         HTTP_REQUEST_TIMEOUT_MS: '600000',
+        IDEMPOTENCY_LOCK_TTL_S: '301',
       });
       assert.equal(env.REQUEST_HANDLER_TIMEOUT_MS, 300000);
     });
@@ -217,6 +224,25 @@ describe('parseEnv', () => {
         () => parse({ SHUTDOWN_TIMEOUT_MS: '3000000000', SHUTDOWN_DELAY_MS: '0' }),
         /SHUTDOWN_TIMEOUT_MS/,
       );
+    });
+  });
+
+  describe('idempotency', () => {
+    it('requires REDIS_URL when the store is redis', () => {
+      assert.throws(() => parse({ IDEMPOTENCY_STORE: 'redis' }), /REDIS_URL/);
+    });
+
+    it('requires the lock to outlive the request handler', () => {
+      assert.throws(
+        () => parse({ IDEMPOTENCY_LOCK_TTL_S: '30', REQUEST_HANDLER_TIMEOUT_MS: '30000' }),
+        /IDEMPOTENCY_LOCK_TTL_S/,
+      );
+    });
+
+    it('skips those checks when idempotency is disabled', () => {
+      const env = parse({ IDEMPOTENCY_ENABLED: 'false', IDEMPOTENCY_STORE: 'redis' });
+      assert.equal(env.IDEMPOTENCY_ENABLED, false);
+      assert.equal(env.REDIS_URL, undefined);
     });
   });
 

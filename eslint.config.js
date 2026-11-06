@@ -19,10 +19,30 @@ const ALLOW = {
   repository: ['models', 'utils', 'lib', 'errors', 'config', 'constants'],
   services: ['repository', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
   controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants'],
-  routes: ['controllers', 'middlewares', 'constants', 'config'],
+  // Route files receive controllers and middleware as arguments (see src/http/README.md).
+  routes: ['http', 'middlewares', 'constants', 'config'],
   middlewares: ['errors', 'lib', 'config', 'constants', 'contexts', 'schemas'],
+  // The container, route definitions and mounter. Knows nothing about any feature.
+  http: ['constants'],
+  // Composition: each module wires one feature's repository, service, controller and routes.
+  modules: [
+    'http',
+    'routes',
+    'controllers',
+    'services',
+    'repository',
+    'models',
+    'middlewares',
+    'lib',
+    'utils',
+    'errors',
+    'config',
+    'constants',
+    'schemas',
+  ],
   // Entry files (server.ts, app.ts) wire it in; no other layer may depend on it.
   rateLimiter: ['constants', 'config', 'lib', 'utils', 'errors', 'schemas'],
+  idempotency: ['constants', 'config', 'lib', 'utils', 'errors', 'schemas'],
 };
 
 const LAYERS = Object.keys(ALLOW);

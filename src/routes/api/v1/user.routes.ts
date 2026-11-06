@@ -1,11 +1,15 @@
-import { Router, type RequestHandler } from 'express';
-import userController from '#controllers/api/v1/user.controller';
+import type { Registry } from '#http/registry';
+import { defineGroup, defineRoute } from '#http/routes';
 
-export const createUserRouter = ({ authLimit }: { authLimit: RequestHandler }) => {
-  const userRouter = Router();
+type UserRoutesDeps = Pick<Registry, 'userController' | 'limit' | 'idempotent'>;
 
-  // Credential endpoints get the strict `auth` policy, not just the global one.
-  userRouter.post('/register', authLimit, userController.register);
-
-  return userRouter;
-};
+export const userRoutes = ({ userController, limit, idempotent }: UserRoutesDeps) =>
+  defineGroup('/user', [
+    defineRoute({
+      method: 'post',
+      path: '/register',
+      access: { strategy: 'public', reason: 'Account signup: the caller has no credentials yet' },
+      // Credential endpoints get the strict `auth` policy, not just the global one.
+      handlers: [limit('auth'), idempotent('default'), userController.register],
+    }),
+  ]);

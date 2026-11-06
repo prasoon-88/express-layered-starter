@@ -48,6 +48,7 @@ Mounted with `app.use(requestIdMiddleware())` — note the call. Middleware with
 |------|------|
 | `requestId.middleware.ts` | Reuses a valid inbound `X-Request-Id` or generates one; sets `req.id`, echoes the header, opens the async context |
 | `httpLogger.middleware.ts` | One access log line per request with method, path, status, duration, IP; warns on slow or aborted requests; skips configured paths |
+| `authorize.middleware.ts` | `authorize(roles)`: `403` unless `req.user.role` is listed, `401` if nobody was authenticated. The `roles` access strategy puts it after `authenticate` |
 | `notFound.middleware.ts` | Converts an unmatched route into a `NotFoundError` |
 | `error.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
 

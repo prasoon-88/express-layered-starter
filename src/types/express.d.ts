@@ -9,9 +9,9 @@ declare global {
       id: string;
 
       /**
-       * Set by the auth middleware on every non-public route, after validating with `authUserSchema`.
-       * Typed as always present so protected handlers need no checks. On public routes it is
-       * `undefined` at runtime, so never read it there.
+       * Set by `authenticate` on every route whose access strategy is not `public`, after
+       * validating with `authUserSchema`. Typed as always present so protected handlers need no
+       * checks. On public routes it is `undefined` at runtime, so never read it there.
        */
       user: AuthUser;
 

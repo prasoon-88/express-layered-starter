@@ -1,8 +1,12 @@
-import { Router } from 'express';
-import signupController from '#controllers/web/signup.controller';
+import type { Registry } from '#http/registry';
+import { defineGroup, defineRoute } from '#http/routes';
 
-const signupRouter = Router();
-
-signupRouter.get('/', signupController.getSignup);
-
-export default signupRouter;
+export const signupRoutes = ({ signupController }: Pick<Registry, 'signupController'>) =>
+  defineGroup('/signup', [
+    defineRoute({
+      method: 'get',
+      path: '/',
+      access: { strategy: 'public', reason: 'Signup form, shown before an account exists' },
+      handlers: [signupController.getSignup],
+    }),
+  ]);

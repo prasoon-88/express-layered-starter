@@ -1,5 +1,5 @@
 import type { Env } from '#constants/env/schema';
-import { closeRedisClient, createRedisClient } from '#lib/redis/index';
+import { closeRedisClient, createRedisClient, type Redis } from '#lib/redis/index';
 import type { Logger } from 'pino';
 import { buildDefaultPolicies, createPolicyRegistry } from './policies.ts';
 import { createRateLimitEngine } from './engine.ts';
@@ -8,12 +8,20 @@ import { startPolicySync } from './policySync.ts';
 import { createLimit } from './middleware.ts';
 import { createStoreReadinessCheck } from './readiness.ts';
 
-export const initRateLimit = async (env: Env, log: Logger) => {
-  const redis =
-    env.RATE_LIMIT_ENABLED && env.RATE_LIMIT_STORE === 'redis' && env.REDIS_URL
+export const initRateLimit = async (env: Env, log: Logger, sharedRedis?: Redis) => {
+  const ownedRedis =
+    sharedRedis === undefined &&
+    env.RATE_LIMIT_ENABLED &&
+    env.RATE_LIMIT_STORE === 'redis' &&
+    env.REDIS_URL
       ? await createRedisClient(env.REDIS_URL, log, {
           connectTimeoutMs: env.REDIS_CONNECT_TIMEOUT_MS,
         })
+      : undefined;
+
+  const redis =
+    env.RATE_LIMIT_ENABLED && env.RATE_LIMIT_STORE === 'redis'
+      ? (sharedRedis ?? ownedRedis)
       : undefined;
 
   if (env.RATE_LIMIT_ENABLED && !redis && env.NODE_ENV === 'production')
@@ -51,7 +59,7 @@ export const initRateLimit = async (env: Env, log: Logger) => {
 
   const close = async () => {
     stopSync?.();
-    if (redis) await closeRedisClient(redis);
+    if (ownedRedis) await closeRedisClient(ownedRedis);
   };
 
   const readinessChecks = redis

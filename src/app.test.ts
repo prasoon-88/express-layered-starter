@@ -2,6 +2,8 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Server } from 'node:http';
 import type { RequestHandler } from 'express';
+import pino from 'pino';
+import { initIdempotency } from '#idempotency';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
@@ -10,8 +12,15 @@ const { parseEnv } = await import('#constants/env/schema');
 
 type AppOptions = Parameters<typeof createApp>[0];
 
-const listen = async (options: Pick<AppOptions, 'rl' | 'readinessChecks'>) => {
-  const server = createApp({ env: parseEnv({ NODE_ENV: 'test' }), ...options }).listen(0);
+const listen = async (
+  options: Pick<AppOptions, 'rl' | 'readinessChecks'> & Partial<Pick<AppOptions, 'idempotency'>>,
+) => {
+  const { app } = createApp({
+    env: parseEnv({ NODE_ENV: 'test' }),
+    idempotency: { idempotent: () => passThrough },
+    ...options,
+  });
+  const server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   const address = server.address();
   assert.ok(address && typeof address === 'object');
@@ -74,6 +83,39 @@ describe('createApp middleware order', () => {
     assert.equal(response.status, 404);
     assert.equal(body.success, false);
     assert.equal(body.code, 'ROUTE_NOT_FOUND');
+  });
+});
+
+describe('createApp route table', () => {
+  const build = () =>
+    createApp({
+      env: parseEnv({ NODE_ENV: 'test' }),
+      rl: { limit: () => passThrough },
+      idempotency: { idempotent: () => passThrough },
+    });
+
+  it('serves only these routes without credentials', () => {
+    const publicRoutes = build()
+      .routes.filter((route) => route.access.strategy === 'public')
+      .map((route) => `${route.method} ${route.path}`)
+      .sort();
+
+    // Adding a public route means adding it here, so it shows up in review.
+    assert.deepEqual(publicRoutes, [
+      'GET /',
+      'GET /health',
+      'GET /health/live',
+      'GET /health/ready',
+      'GET /signup',
+      'POST /api/v1/user/register',
+    ]);
+  });
+
+  it('gives every route an access rule and an owning module', () => {
+    for (const route of build().routes) {
+      assert.ok(route.access.strategy, `${route.method} ${route.path}`);
+      assert.ok(route.module, `${route.method} ${route.path}`);
+    }
   });
 });
 
@@ -147,6 +189,10 @@ describe('POST /api/v1/user/register', () => {
   const limitedWith: unknown[] = [];
 
   before(async () => {
+    const idempotency = await initIdempotency(
+      parseEnv({ NODE_ENV: 'test', SERVICE_NAME: 'register-idem' }),
+      pino({ level: 'silent' }),
+    );
     ({ server, baseUrl } = await listen({
       rl: {
         limit: ((policy: unknown) => {
@@ -154,6 +200,7 @@ describe('POST /api/v1/user/register', () => {
           return passThrough;
         }) as AppOptions['rl']['limit'],
       },
+      idempotency,
     }));
   });
 
@@ -212,5 +259,72 @@ describe('POST /api/v1/user/register', () => {
 
   it('is covered by the strict auth rate limit policy', () => {
     assert.ok(limitedWith.includes('auth'));
+  });
+
+  it('replays the first response when the same Idempotency-Key is sent again', async () => {
+    const headers = { 'Content-Type': 'application/json', 'Idempotency-Key': 'replay-key-1' };
+    const payload = JSON.stringify({ ...valid, email: 'replay@example.com' });
+    const first = await fetch(`${baseUrl}/api/v1/user/register`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+    const firstBody = await first.json();
+    const second = await fetch(`${baseUrl}/api/v1/user/register`, {
+      method: 'POST',
+      headers,
+      body: payload,
+    });
+
+    assert.equal(first.status, 201);
+    assert.equal(second.status, 201);
+    assert.equal(second.headers.get('Idempotent-Replayed'), 'true');
+    assert.deepEqual(await second.json(), firstBody);
+  });
+
+  it('rejects the same Idempotency-Key when the body differs', async () => {
+    const headers = { 'Content-Type': 'application/json', 'Idempotency-Key': 'replay-key-2' };
+    const first = await fetch(`${baseUrl}/api/v1/user/register`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...valid, email: 'replay-a@example.com' }),
+    });
+    const second = await fetch(`${baseUrl}/api/v1/user/register`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...valid, email: 'replay-b@example.com' }),
+    });
+    const body = (await second.json()) as { code: string };
+
+    assert.equal(first.status, 201);
+    assert.equal(second.status, 422);
+    assert.equal(body.code, 'IDEMPOTENCY_KEY_REUSED');
+  });
+});
+
+describe('createApp dependency isolation', () => {
+  const servers: Server[] = [];
+
+  after(() => {
+    servers.forEach((s) => s.close());
+  });
+
+  it('gives each app its own services, so two apps never share users', async () => {
+    const register = async () => {
+      const started = await listen({ rl: { limit: () => passThrough } });
+      servers.push(started.server);
+      return fetch(`${started.baseUrl}/api/v1/user/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: 'Grace Hopper',
+          email: 'grace@example.com',
+          password: 'correct-horse-2',
+        }),
+      });
+    };
+
+    assert.equal((await register()).status, 201);
+    assert.equal((await register()).status, 201);
   });
 });

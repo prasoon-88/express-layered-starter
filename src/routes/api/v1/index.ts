@@ -1,10 +1,3 @@
-import { Router, type RequestHandler } from 'express';
-import { createUserRouter } from './user.routes.ts';
+import { defineGroup, type RouteNode } from '#http/routes';
 
-export const createApiV1Router = (deps: { authLimit: RequestHandler }) => {
-  const router = Router();
-
-  router.use('/user', createUserRouter(deps));
-
-  return router;
-};
+export const apiV1Routes = (modules: readonly RouteNode[]) => defineGroup('/v1', modules);

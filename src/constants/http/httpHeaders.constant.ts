@@ -19,6 +19,7 @@ const HTTP_HEADERS = Object.freeze({
   X_REQUESTED_WITH: 'X-Requested-With',
   IF_MODIFIED_SINCE: 'If-Modified-Since',
   IF_NONE_MATCH: 'If-None-Match',
+  IDEMPOTENCY_KEY: 'Idempotency-Key',
 
   // Request / response body
   CONTENT_TYPE: 'Content-Type',
@@ -37,6 +38,7 @@ const HTTP_HEADERS = Object.freeze({
   ALLOW: 'Allow',
   RATE_LIMIT_POLICY: 'RateLimit-Policy',
   RATE_LIMIT: 'RateLimit',
+  IDEMPOTENT_REPLAYED: 'Idempotent-Replayed',
 
   // CORS
   ACCESS_CONTROL_ALLOW_ORIGIN: 'Access-Control-Allow-Origin',
@@ -73,9 +75,16 @@ export const CONTENT_TYPES = Object.freeze({
   OCTET_STREAM: 'application/octet-stream',
 });
 
-export const CORS_DEFAULT_HEADERS = [HTTP_HEADERS.CONTENT_TYPE, HTTP_HEADERS.AUTHORIZATION];
+export const CORS_DEFAULT_HEADERS = [
+  HTTP_HEADERS.CONTENT_TYPE,
+  HTTP_HEADERS.AUTHORIZATION,
+  HTTP_HEADERS.IDEMPOTENCY_KEY,
+];
 
 // Browsers hide non-standard response headers from page JS unless listed here.
-export const CORS_DEFAULT_EXPOSED_HEADERS = [HTTP_HEADERS.X_REQUEST_ID];
+export const CORS_DEFAULT_EXPOSED_HEADERS = [
+  HTTP_HEADERS.X_REQUEST_ID,
+  HTTP_HEADERS.IDEMPOTENT_REPLAYED,
+];
 
 export default HTTP_HEADERS;

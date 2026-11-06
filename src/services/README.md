@@ -13,12 +13,15 @@
 - ❌ Raw database queries (that's `repository/`)
 
 ## Example
-```js
+```ts
 // services/post.service.ts
-import postRepository from '#repository/post.repository'
+import type { PostRepository } from '#repository/post.repository'
 import { BadRequestError, ConflictError } from '#errors'
 
-const createPost = async ({ title, body, authorId }) => {
+type PostServiceDeps = { postRepository: Pick<PostRepository, 'findBySlug' | 'create'> }
+
+export const createPostService = ({ postRepository }: PostServiceDeps) => {
+  const createPost = async ({ title, body, authorId }: NewPost) => {
     if (!title) throw new BadRequestError('Title is required')    // rule
 
     const slug = title.toLowerCase().replace(/\s+/g, '-')         // transformation
@@ -27,10 +30,15 @@ const createPost = async ({ title, body, authorId }) => {
     if (existing) throw new ConflictError('A post with this title already exists')
 
     return postRepository.create({ title, body, authorId, slug }) // hand off to repo
+  }
+
+  return { createPost }
 }
 
-export default { createPost }
+export type PostService = ReturnType<typeof createPostService>
 ```
+
+**Receive dependencies, don't import them.** A service is a factory that takes its repositories (and other services) as arguments, typed with `Pick` down to what it calls. Its [module](../modules/README.md) wires the real ones; a test passes a fresh in-memory one. Import the repository's *type* only.
 
 **Throw typed errors, don't return `null`.** A `NotFoundError` from here becomes a 404 with the right code and body without the service knowing what HTTP is — and every caller, including a CLI or a cron job, gets a failure it can catch by type.
 

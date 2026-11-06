@@ -1,14 +1,20 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { ConflictError } from '#errors';
-import userRepository from '#repository/user.repository';
+import { createUserRepository, type UserRepository } from '#repository/user.repository';
 import { verifyPassword } from '#utils/password.util';
-import userService from './user.service.ts';
+import { createUserService, type UserService } from './user.service.ts';
 
 const input = { fullName: 'Ada Lovelace', email: 'ada@example.com', password: 'correct-horse-1' };
 
 describe('userService.registerUser', () => {
-  beforeEach(() => userRepository.clear());
+  let userRepository: UserRepository;
+  let userService: UserService;
+
+  beforeEach(() => {
+    userRepository = createUserRepository();
+    userService = createUserService({ userRepository });
+  });
 
   it('stores a hash, never the password, and returns the public fields', async () => {
     const user = await userService.registerUser(input);
@@ -37,5 +43,12 @@ describe('userService.registerUser', () => {
     ]);
 
     assert.deepEqual(results.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+  });
+
+  it('keeps each repository separate, so two apps never share users', async () => {
+    await userService.registerUser(input);
+    const other = createUserService({ userRepository: createUserRepository() });
+
+    await assert.doesNotReject(other.registerUser(input));
   });
 });

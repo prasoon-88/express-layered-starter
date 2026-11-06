@@ -6,7 +6,8 @@ This app uses a **layered architecture**. Each layer has one job and only talks 
 
 | Layer | Folder | Responsibility | Touches `req`/`res`? | Touches DB? |
 |-------|--------|----------------|:---:|:---:|
-| Route | [`routes/`](routes/) | Map URL → controller | ❌ | ❌ |
+| Module | [`modules/`](modules/) | Wire one feature: providers, needs, routes | ❌ | ❌ |
+| Route | [`routes/`](routes/) | Map URL + access rule → middleware and controller | ❌ | ❌ |
 | Controller | [`controllers/`](controllers/) | HTTP: read req, send res | ✅ | ❌ |
 | Service | [`services/`](services/) | Business logic & rules | ❌ | ❌ |
 | Repository | [`repository/`](repository/) | Raw database access | ❌ | ✅ |
@@ -14,6 +15,8 @@ This app uses a **layered architecture**. Each layer has one job and only talks 
 
 **Cross-cutting (sit beside the layers, not in them):**
 [`middlewares/`](middlewares/) · [`errors/`](errors/) · [`contexts/`](contexts/)
+
+**Assembly:** [`http/`](http/) builds one router from the route tree in `app.ts` and supplies every route through a typed container. Each layer below exports **factories** (`createUserService({ userRepository })`), never configured singletons, so a module can wire them and a test can pass fakes.
 
 **Shared (usable by any layer):**
 [`config/`](config/) · [`constants/`](constants/) · [`utils/`](utils/) · [`lib/`](lib/)
@@ -29,7 +32,7 @@ requestId       assign req.id, open the async context
    ↓
 httpLogger      start the timer, log on finish
    ↓
-routes/         "GET /posts/:id → postController.getPost"
+routes/         "GET /posts/:id, public → postController.getPost"
    ↓
 controllers/    read req.params.id → call service → apiResponse.ok()
    ↓
@@ -52,42 +55,61 @@ errorHandler    normalize → log → respond (JSON for /api, rendered view othe
 
 ## A feature across all layers (example: get one post)
 
-```js
-// routes/api/v1/post.routes.ts
-postRouter.get('/posts/:id', postController.getPost)
+```ts
+// routes/api/v1/post.routes.ts: the URL, who may call it, and what answers
+export const postRoutes = ({ postController }: Pick<Registry, 'postController'>) =>
+  defineGroup('/post', [
+    defineRoute({
+      method: 'get',
+      path: '/:id',
+      access: { strategy: 'public', reason: 'Posts are readable without an account' },
+      handlers: [postController.getPost],
+    }),
+  ])
 ```
 
-```js
-// controllers/api/post.controller.ts — HTTP only
-import { apiResponse } from '#utils/apiResponse.util'
-
-export const getPost = async (req, res, next) => {
-    try {
-        const post = await postService.getPostById(req.params.id)
-        apiResponse.ok(res, post)
-    } catch (err) {
-        next(err)            // hand it to the error middleware, never format it here
-    }
-}
+```ts
+// controllers/api/post.controller.ts: HTTP only
+export const createPostController = ({ postService }: { postService: PostService }) => ({
+  getPost: route({ params: z.object({ id: z.uuid() }) }, ({ params }) =>
+    postService.getPostById(params.id),
+  ),
+})
 ```
 
-```js
-// services/post.service.ts — the rules
-import { NotFoundError } from '#errors'
-
-export const getPostById = async (id) => {
+```ts
+// services/post.service.ts: the rules
+export const createPostService = ({ postRepository }: { postRepository: PostRepository }) => ({
+  getPostById: async (id: string) => {
     const post = await postRepository.findById(id)
     if (!post) throw new NotFoundError('Post not found')   // business rule
     return post
-}
+  },
+})
 ```
 
-```js
-// repository/post.repository.ts — raw DB
-export const findById = (id) => Post.findById(id)
+```ts
+// repository/post.repository.ts: raw DB
+export const createPostRepository = () => ({
+  findById: (id: string) => Post.findById(id),
+})
 ```
 
-Note what the controller does *not* do: no status codes picked by hand, no error shaping, no database. It translates HTTP to a service call and back.
+```ts
+// modules/post.module.ts: the wiring, and nothing else
+export const postModule = defineModule({
+  name: 'post',
+  providers: {
+    postRepository: () => createPostRepository(),
+    postService: (get) => createPostService({ postRepository: get('postRepository') }),
+    postController: (get) => createPostController({ postService: get('postService') }),
+  },
+  needs: ['postController'],
+  routes: postRoutes,
+})
+```
+
+Note what the controller does *not* do: no status codes picked by hand, no error shaping, no database. It translates HTTP to a service call and back. And no layer imports the one below as a ready-made singleton: each receives it, which is what lets a test hand a service a fake repository.
 
 ## Where does my code go? (decision guide)
 
@@ -106,6 +128,9 @@ Note what the controller does *not* do: no status codes picked by hand, no error
 | Is it a tiny generic helper (pure function)? | `utils/` |
 | Does it wrap an external system or SDK? | `lib/` |
 | Does it count, throttle or report request volume? | `rateLimiter/` |
+| Does it declare a URL, its access rule and its middleware? | `routes/` |
+| Does it wire one feature's repository, service, controller and routes? | `modules/` |
+| Does it assemble, check or supply routes for every feature? | `http/` |
 | Is it a page template to display? | `views/` |
 
 ## Dependency rules (what may import what)
@@ -127,13 +152,20 @@ repository/  ← uses models
    ↑
 services/    ← uses repository, utils, lib, errors, config
    ↑
-controllers/ ← uses services, utils, errors, lib (route())
+controllers/ ← uses services (types), utils, errors, lib (route())
    ↑
-routes/      ← uses controllers + middlewares
+routes/      ← uses http (definitions) + middlewares; receives controllers as arguments
+   ↑
+modules/     ← composition: may use every layer above except rateLimiter/idempotency
+   ↑
+app.ts       ← the route tree and the container
+
+http/        ← uses constants only. Imported by routes/, modules/ and app.ts.
 
 rateLimiter/ ← uses constants, config, lib, utils, errors, schemas. Nothing imports it
-               except the entry files: server.ts builds it, app.ts mounts it, and
-               routes receive the handler they need as an argument.
+idempotency/   except the entry files: server.ts builds them, app.ts registers their
+               middleware factories in the container (`limit`, `idempotent`), and route
+               files receive them as arguments.
 ```
 
 **Dependencies point downward only.** A lower layer must never import an upper layer (e.g. a service never imports a controller) — that creates circular dependencies and breaks reusability.
@@ -143,7 +175,7 @@ rateLimiter/ ← uses constants, config, lib, utils, errors, schemas. Nothing im
 Imports across folders use the subpath aliases declared in `package.json`:
 
 ```js
-import userService from '#services/user.service'
+import { createUserService } from '#services/user.service'
 import { NotFoundError } from '#errors'
 ```
 

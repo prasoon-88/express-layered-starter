@@ -16,13 +16,14 @@
 
 ```
 server.ts   initRateLimit(env, logger)  →  { limit, close, readinessChecks }
-app.ts      app.use(rl.limit('global'))          every route below this line
-routes      userRouter.post('/register', authLimit, ...)    the strict `auth` policy
+app.ts      container.provide('limit', () => rl.limit)
+            defineGroup('/', [...], { use: [rl.limit('global'), ...] })    every route in the group
+routes      handlers: [limit('auth'), ...]      the strict `auth` policy, `limit` received as an argument
 ```
 
-`app.ts` mounts `/health` **before** the global limiter, so probes are never limited, and a limiter whose store is down cannot take the health endpoints down with it. `RATE_LIMIT_SKIP_PATHS` is for anything else you want exempt, and is empty by default.
+In the route tree in `app.ts`, `/health` sits **outside** the group that carries the global limiter, so probes are never limited, and a limiter whose store is down cannot take the health endpoints down with it. `RATE_LIMIT_SKIP_PATHS` is for anything else you want exempt, and is empty by default.
 
-Nothing outside `server.ts` and `app.ts` imports this folder; ESLint enforces it (`rateLimiter` in [`eslint.config.js`](../../eslint.config.js)). Routes receive the handler they need as an argument (`createRoutes({ authLimit })`).
+Nothing outside `server.ts` and `app.ts` imports this folder; ESLint enforces it (`rateLimiter` in [`eslint.config.js`](../../eslint.config.js)). Route files get `limit` from the container: a module lists it in `needs`, and the route function receives it (see [`http/README.md`](../http/README.md)). A limit that must also count rejected callers goes in the route's `pre`, which runs before the access check.
 
 ## Policies
 

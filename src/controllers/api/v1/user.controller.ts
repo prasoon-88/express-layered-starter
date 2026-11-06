@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { route } from '#lib/http/route.lib';
 import REGEX from '#constants/regex.constant';
 import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import userService from '#services/user.service';
+import type { UserService } from '#services/user.service';
 
 // Endpoint-only schemas: they stay here until a second file needs them.
 const registerBody = z.strictObject({
@@ -19,12 +19,18 @@ const registeredUser = z.object({
   email: z.email(),
 });
 
-export const register = route(
-  { body: registerBody, response: registeredUser },
-  ({ body }) => userService.registerUser(body),
-  { status: HTTP_STATUS.CREATED },
-);
+type UserControllerDeps = {
+  userService: Pick<UserService, 'registerUser'>;
+};
 
-const userController = { register };
+export const createUserController = ({ userService }: UserControllerDeps) => {
+  const register = route(
+    { body: registerBody, response: registeredUser },
+    ({ body }) => userService.registerUser(body),
+    { status: HTTP_STATUS.CREATED },
+  );
 
-export default userController;
+  return { register };
+};
+
+export type UserController = ReturnType<typeof createUserController>;
