@@ -7,15 +7,15 @@ import {
   ServiceUnavailableError,
   UnprocessableEntityError,
 } from '#errors';
-import ERROR_CODES from '#constants/error/errorCodes.constant';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { ERROR_CODES } from '#constants/error/errorCodes.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
 import {
   IDEMPOTENCY_NON_CACHEABLE_STATUSES,
   type IdempotencyStoreErrorMode,
-} from '#constants/idempotency.constants';
-import REGEX from '#constants/regex.constant';
-import { concatenateStrings } from '#utils/concateStrings';
+} from '#constants/idempotency.constant';
+import { REGEX } from '#constants/regex.constant';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import { captureResponse } from './capture.ts';
 import { fingerprint } from './fingerprint.ts';
 import type { PolicyName, PolicyRegistry } from './policies.ts';
@@ -26,6 +26,7 @@ import type {
   IdempotencyStore,
   StoredResponse,
 } from './types.ts';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 const REPLAYED = 'true';
 const NON_CACHEABLE = new Set<number>(IDEMPOTENCY_NON_CACHEABLE_STATUSES);
@@ -100,7 +101,7 @@ export const createIdempotent = ({
         result = await store.acquire(
           storageKey,
           { state: 'in_progress', fingerprint: digest, token, startedAt: Date.now() },
-          policy.lockTtlS * 1000,
+          policy.lockTtlS * MS_PER_SECOND,
         );
       } catch (err) {
         log.error({ err, policy: options.policy }, 'idempotency store error');
@@ -139,7 +140,7 @@ export const createIdempotent = ({
                   response: captured,
                   completedAt: Date.now(),
                 },
-                policy.ttlS * 1000,
+                policy.ttlS * MS_PER_SECOND,
               )
             : store.release(storageKey, token);
         done.catch((err) => log.warn({ err }, 'idempotency finalize failed'));

@@ -1,7 +1,7 @@
 import { createAuthController, type AuthController } from '#controllers/api/v1/auth.controller';
 import { defineModule } from '#http/routes';
 import { createAccessTokens, type AccessTokens } from '#lib/auth/accessToken';
-import { createAuthenticate } from '#middlewares/authenticate.middleware';
+import { createAuthenticateMiddleware } from '#middlewares/authenticate.middleware';
 import {
   createRefreshTokenRepository,
   type RefreshTokenRepository,
@@ -9,7 +9,8 @@ import {
 import { createRedisRefreshTokenRepository } from '#repository/refreshToken.redis.repository';
 import { authRoutes } from '#routes/api/v1/auth.routes';
 import { createAuthService, type AuthService } from '#services/auth.service';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 declare module '#http/registry' {
   interface Registry {
@@ -42,7 +43,7 @@ export const authModule = defineModule({
       return createRedisRefreshTokenRepository({
         redis: get('redis'),
         prefix: concatenateStrings([env.SERVICE_NAME, 'auth'], ':'),
-        familyTtlMs: env.JWT_REFRESH_TTL_S * 1000,
+        familyTtlMs: env.JWT_REFRESH_TTL_S * MS_PER_SECOND,
       });
     },
     authService: (get) =>
@@ -53,7 +54,7 @@ export const authModule = defineModule({
         refreshTtlS: get('env').JWT_REFRESH_TTL_S,
       }),
     authController: (get) => createAuthController({ authService: get('authService') }),
-    authenticate: (get) => createAuthenticate({ accessTokens: get('accessTokens') }),
+    authenticate: (get) => createAuthenticateMiddleware({ accessTokens: get('accessTokens') }),
   },
   needs: ['authController', 'limit'],
   routes: authRoutes,

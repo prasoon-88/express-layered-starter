@@ -7,7 +7,7 @@ import pino from 'pino';
 process.env.NODE_ENV ??= 'test';
 
 const { registerProcessHandler } = await import('./index.ts');
-const { default: lifecycleState } = await import('./state.ts');
+const { lifecycleState } = await import('./state.ts');
 
 const logger = pino({ level: 'silent' });
 

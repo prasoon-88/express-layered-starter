@@ -9,7 +9,7 @@ import {
   ServiceUnavailableError,
   UnprocessableEntityError,
 } from '#errors';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
 import { createIdempotent } from './middleware.ts';
 import { buildDefaultPolicies, createPolicyRegistry } from './policies.ts';
 import { createMemoryStore } from './memory.store.ts';

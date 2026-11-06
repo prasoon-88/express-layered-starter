@@ -1,8 +1,8 @@
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
 import { AppError } from '#errors';
 
-const jwtConverter = (err: unknown) => {
+export const jwtConverter = (err: unknown) => {
   if (!(err instanceof Error)) return null;
 
   switch (err.name) {
@@ -20,5 +20,3 @@ const jwtConverter = (err: unknown) => {
 
   return null;
 };
-
-export default jwtConverter;

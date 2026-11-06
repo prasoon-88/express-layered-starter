@@ -1,7 +1,7 @@
 import { READINESS_CHECK_TIMEOUT_MS } from '#constants/health.constant';
 import { getLogger } from '#lib/logger/index';
 
-const logger = getLogger('readiness');
+const logger = getLogger('health');
 
 export type ReadinessCheck = {
   name: string;

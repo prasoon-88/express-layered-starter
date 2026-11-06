@@ -1,8 +1,8 @@
 import type { ErrorRequestHandler, Request } from 'express';
-import ENV_CONSTANTS from '#constants/env/index';
+import { ENV_CONSTANTS } from '#constants/env/index';
 import { AppError, InternalServerError } from '#errors';
 import { convertError } from '#errors/converter/index';
-import logger from '#lib/logger/index';
+import { logger } from '#lib/logger/index';
 
 const toUnknownError = (err: unknown) => {
   const unknownError = new InternalServerError();
@@ -26,7 +26,7 @@ const wantsJson = (req: Request) =>
   req.originalUrl.startsWith('/api') || req.xhr || req.accepts(['json', 'html']) === 'json';
 
 // Anything can be thrown in JS, so `err` is `unknown` and must be narrowed before use.
-const errorHandlerMiddleware: ErrorRequestHandler = (err: unknown, req, res, next) => {
+export const errorHandlerMiddleware: ErrorRequestHandler = (err: unknown, req, res, next) => {
   if (res.headersSent) return next(err);
 
   const error = normalizeError(err);
@@ -65,5 +65,3 @@ const errorHandlerMiddleware: ErrorRequestHandler = (err: unknown, req, res, nex
     error: { ...errorJsonResp, statusCode: error.statusCode },
   });
 };
-
-export default errorHandlerMiddleware;

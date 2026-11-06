@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { route } from '#lib/http/route.lib';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { route } from '#lib/http/route';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
 import { TOKEN_TYPE } from '#constants/auth.constant';
 import { newPasswordSchema } from '#schemas/user.schema';
 import type { AuthService } from '#services/auth.service';

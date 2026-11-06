@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import pino from 'pino';
 import { parseEnv } from '#constants/env/schema';
 import { ServiceUnavailableError, TooManyRequestsError } from '#errors';
+import { waitFor } from '#testing/http';
 import { freePort, holdDeadPort, redisSkip as skip, startRedisServer } from '#testing/redisServer';
 import { initRateLimit } from './index.ts';
 
@@ -49,18 +50,6 @@ const hit = async (limiter: Awaited<ReturnType<typeof initRateLimit>>, ip: strin
   return { passed, headers: res.headers };
 };
 
-const waitFor = async (probe: () => Promise<unknown>, timeoutMs: number) => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      return await probe();
-    } catch (err) {
-      if (Date.now() > deadline) throw err;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-};
-
 describe('initRateLimit with the Redis store', { skip }, () => {
   it('shares one limit across instances through Redis', async () => {
     const port = await freePort();
@@ -100,7 +89,14 @@ describe('initRateLimit with the Redis store', { skip }, () => {
 
       await dead.release();
       await startRedisServer(port);
-      await waitFor(() => check.run(), 10_000);
+      await waitFor(
+        async () => {
+          await check.run();
+          return true;
+        },
+        'the store to be reported up',
+        10_000,
+      );
     } finally {
       await limiter.close();
     }

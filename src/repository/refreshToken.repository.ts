@@ -1,4 +1,4 @@
-export interface NewRefreshToken {
+export type NewRefreshToken = {
   id: string;
   userId: string;
   /** Every token rotated from one login shares the family; reuse or logout revokes all of it. */
@@ -9,27 +9,27 @@ export interface NewRefreshToken {
   hash: string;
   /** Milliseconds since the epoch. */
   expiresAt: number;
-}
+};
 
-export interface StoredRefreshToken extends NewRefreshToken {
+export type StoredRefreshToken = NewRefreshToken & {
   usedAt: number | null;
   /** When its family was revoked. */
   revokedAt: number | null;
-}
+};
 
 // Every store implements these four calls with the same guarantees (see the contract test):
 // - markUsed is atomic: `UPDATE tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, checking the row count.
 // - Revocation lives on the family, not on each token, so a token written into a family
 //   after it was revoked (a rotation racing a reuse) is revoked too.
 // - An expired token is forgotten.
-export interface RefreshTokenRepository {
+export type RefreshTokenRepository = {
   create(data: NewRefreshToken, now: number): Promise<void>;
   findById(id: string): Promise<StoredRefreshToken | undefined>;
   /** True for exactly one caller: the first to use the token. */
   markUsed(id: string, now: number): Promise<boolean>;
   /** Keeps the first revocation time. */
   revokeFamily(familyId: string, now: number): Promise<void>;
-}
+};
 
 // Per instance and lost on restart. AUTH_STORE=redis selects the shared store instead.
 export const createRefreshTokenRepository = (): RefreshTokenRepository => {

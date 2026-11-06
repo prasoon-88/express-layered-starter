@@ -1,24 +1,24 @@
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
 import type { UserRole } from '#constants/user.constant';
 import { UnauthorizedError } from '#errors';
 import type { UserRepository } from '#repository/user.repository';
 import { hashPassword } from '#utils/password.util';
 
-export interface RegisterUserInput {
+export type RegisterUserInput = {
   fullName: string;
   email: string;
   password: string;
-}
+};
 
-export interface RegisteredUser {
+export type RegisteredUser = {
   id: string;
   fullName: string;
   email: string;
-}
+};
 
-export interface UserProfile extends RegisteredUser {
+export type UserProfile = RegisteredUser & {
   role: UserRole;
-}
+};
 
 type UserServiceDeps = {
   userRepository: Pick<UserRepository, 'create' | 'findById'>;

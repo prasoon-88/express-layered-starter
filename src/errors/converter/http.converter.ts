@@ -1,6 +1,6 @@
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
-import STATUS_TO_CODE from '#constants/statusToCode.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
+import { STATUS_TO_CODE } from '#constants/statusToCode.constant';
 import { AppError } from '#errors';
 
 // Errors from Express's body parsers (http-errors) carry these extra, untyped fields.
@@ -11,7 +11,7 @@ type HttpLikeError = Error & {
   expose?: unknown;
 };
 
-const httpErrorConverter = (err: unknown) => {
+export const httpConverter = (err: unknown) => {
   if (!(err instanceof Error)) return null;
   const httpErr: HttpLikeError = err;
 
@@ -49,5 +49,3 @@ const httpErrorConverter = (err: unknown) => {
 
   return null;
 };
-
-export default httpErrorConverter;

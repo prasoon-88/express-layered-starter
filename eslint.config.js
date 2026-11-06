@@ -53,6 +53,12 @@ const noParentRelative = {
   message: 'Use a #alias (e.g. #services/...) instead of a ../ relative import.',
 };
 
+// `./x.ts` is for a file in the same folder; reaching into a subfolder is a cross-folder import.
+const noSubfolderRelative = {
+  regex: '^\\./[^/]+/',
+  message: 'Use a #alias (e.g. #constants/http/...) instead of a relative import into a subfolder.',
+};
+
 // Match `#alias` imports with `regex`, NOT `group`: group patterns use gitignore
 // syntax where a leading `#` is a comment, so `#services/*` would silently never match.
 const aliasPatterns = (layer) => {
@@ -81,10 +87,32 @@ const noTelemetrySdkImports = restrictImports(
   'Only src/lib/telemetry and src/instrumentation.ts load the OpenTelemetry SDK. Use @opentelemetry/api.',
 );
 
+// Named exports only: the imported name then matches the declared one, so renames and grep both work.
+const noDefaultExport = [
+  { selector: 'ExportDefaultDeclaration', message: 'Use a named export (src/README.md).' },
+  {
+    selector: 'ExportSpecifier[exported.name="default"]',
+    message: 'Use a named export (src/README.md).',
+  },
+];
+
+// `type` for shapes. An interface is only for declaration merging: augmenting a module or a global.
+const noInterface = [
+  {
+    selector: 'TSInterfaceDeclaration:not(TSModuleDeclaration TSInterfaceDeclaration)',
+    message: 'Use a `type` alias; `interface` is only for declaration merging (src/README.md).',
+  },
+];
+
+const conventions = [...noDefaultExport, ...noInterface];
+
 const layerConfigs = LAYERS.map((layer) => ({
   files: [`src/${layer}/**/*.ts`],
   rules: {
-    'no-restricted-imports': ['error', { patterns: [noParentRelative, aliasPatterns(layer)] }],
+    'no-restricted-imports': [
+      'error',
+      { patterns: [noParentRelative, noSubfolderRelative, aliasPatterns(layer)] },
+    ],
   },
 }));
 
@@ -140,7 +168,7 @@ export default defineConfig([
   {
     files: ['src/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [noParentRelative] }],
+      'no-restricted-imports': ['error', { patterns: [noParentRelative, noSubfolderRelative] }],
     },
   },
 
@@ -150,19 +178,31 @@ export default defineConfig([
   // Test helpers are not built into dist/, so production code importing one would crash at boot.
   // The OpenTelemetry SDK is started by the preload only; app code uses @opentelemetry/api,
   // which does nothing until the SDK runs. A separate rule from no-restricted-imports, so the
-  // per-layer configs above don't replace it.
+  // per-layer configs above don't replace it. A later block replaces this rule rather than
+  // adding to it, so each block lists `conventions` again.
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...conventions],
+    },
+  },
   {
     files: ['src/**/*.ts'],
     ignores: ['src/**/*.test.ts', 'src/testing/**'],
     rules: {
-      'no-restricted-syntax': ['error', ...noTestingImports, ...noTelemetrySdkImports],
+      'no-restricted-syntax': [
+        'error',
+        ...conventions,
+        ...noTestingImports,
+        ...noTelemetrySdkImports,
+      ],
     },
   },
   {
     files: ['src/lib/telemetry/**/*.ts', 'src/instrumentation.ts'],
     ignores: ['src/**/*.test.ts'],
     rules: {
-      'no-restricted-syntax': ['error', ...noTestingImports],
+      'no-restricted-syntax': ['error', ...conventions, ...noTestingImports],
     },
   },
 

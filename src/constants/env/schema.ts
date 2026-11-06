@@ -12,7 +12,7 @@ import {
   DEFAULT_IDEMPOTENCY_TTL_S,
   IDEMPOTENCY_STORE_ERROR_MODES,
   IDEMPOTENCY_STORES,
-} from '#constants/idempotency.constants';
+} from '#constants/idempotency.constant';
 import {
   DEFAULT_RATE_LIMIT_AUTH_BLOCK_S,
   DEFAULT_RATE_LIMIT_AUTH_MAX,
@@ -23,11 +23,11 @@ import {
   DEFAULT_RATE_LIMIT_SKIP_PATHS,
   DEFAULT_RATE_LIMIT_STORE,
   DEFAULT_RATE_LIMIT_WINDOW_S,
-  DEFAULT_STORE_ERROR_MODE,
+  DEFAULT_RATE_LIMIT_STORE_ERROR_MODE,
   RATE_LIMIT_STORES,
-  STORE_ERROR_MODES,
-} from '#constants/rateLimit.constants';
-import REGEX from '#constants/regex.constant';
+  RATE_LIMIT_STORE_ERROR_MODES,
+} from '#constants/rateLimit.constant';
+import { REGEX } from '#constants/regex.constant';
 import {
   AUTH_STORES,
   DEFAULT_AUTH_STORE,
@@ -39,6 +39,7 @@ import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { LevelWithSilent } from 'pino';
 import * as z from 'zod';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 const NODE_ENVS = ['development', 'test', 'production'] as const;
 const LOG_LEVELS = [
@@ -171,7 +172,9 @@ const envSchema = z.preprocess(
       REDIS_CONNECT_TIMEOUT_MS: wholeNumber({ min: 1, max: MAX_TIMER_MS }).default(5000),
       RATE_LIMIT_ENABLED: bool(true),
       RATE_LIMIT_STORE: z.enum(RATE_LIMIT_STORES).default(DEFAULT_RATE_LIMIT_STORE),
-      RATE_LIMIT_ON_STORE_ERROR: z.enum(STORE_ERROR_MODES).default(DEFAULT_STORE_ERROR_MODE),
+      RATE_LIMIT_ON_STORE_ERROR: z
+        .enum(RATE_LIMIT_STORE_ERROR_MODES)
+        .default(DEFAULT_RATE_LIMIT_STORE_ERROR_MODE),
       RATE_LIMIT_WINDOW_S: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_WINDOW_S),
       RATE_LIMIT_MAX: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_MAX),
       RATE_LIMIT_AUTH_WINDOW_S: wholeNumber({ min: 1 }).default(DEFAULT_RATE_LIMIT_AUTH_WINDOW_S),
@@ -268,7 +271,7 @@ const envSchema = z.preprocess(
 
         // The lock has to outlive the handler. Otherwise a slow request loses its key mid-flight
         // and the retry is told the original is still in progress.
-        if (e.IDEMPOTENCY_LOCK_TTL_S * 1000 <= e.REQUEST_HANDLER_TIMEOUT_MS)
+        if (e.IDEMPOTENCY_LOCK_TTL_S * MS_PER_SECOND <= e.REQUEST_HANDLER_TIMEOUT_MS)
           addIssue(
             ['IDEMPOTENCY_LOCK_TTL_S'],
             'must be greater than REQUEST_HANDLER_TIMEOUT_MS ( REQUEST_HANDLER_TIMEOUT_MS < IDEMPOTENCY_LOCK_TTL_S )',

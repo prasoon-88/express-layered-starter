@@ -1,6 +1,9 @@
-import { createHealthController, type HealthController } from '#controllers/health/index';
+import {
+  createHealthController,
+  type HealthController,
+} from '#controllers/health/health.controller';
 import { defineModule } from '#http/routes';
-import { healthRoutes } from '#routes/health/index';
+import { healthRoutes } from '#routes/health/health.routes';
 
 declare module '#http/registry' {
   interface Registry {

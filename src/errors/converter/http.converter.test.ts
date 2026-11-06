@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import httpConverter from './http.converter.ts';
+import { httpConverter } from './http.converter.ts';
 
 // What `http-errors` (used by Express and body-parser) produces for a client-visible error.
 const httpError = (status: number) =>

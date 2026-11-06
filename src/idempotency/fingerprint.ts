@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Request } from 'express';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 
 const canonical = (value: unknown): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);

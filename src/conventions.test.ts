@@ -1,0 +1,48 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+// The naming rules of src/README.md that a linter cannot see: a file in a layer folder carries
+// that layer's suffix, so its role shows in every import and every stack trace. Feature folders
+// (lib/<system>/, http/, rateLimiter/, idempotency/, contexts/) are their own role and have none.
+
+const SRC = import.meta.dirname;
+
+// Per layer folder, the names a source file may have. A test is checked as the file it tests.
+const RULES: Record<string, RegExp> = {
+  config: /\.config\.ts$/,
+  constants: /\.constant\.ts$|^env\/(index|schema)\.ts$/,
+  controllers: /\.controller\.ts$/,
+  errors: /\.error\.ts$|^index\.ts$|^converter\/(\w+\.converter|index)\.ts$/,
+  middlewares: /\.middleware\.ts$/,
+  models: /\.model\.ts$/,
+  modules: /\.module\.ts$|^index\.ts$/,
+  repository: /\.repository\.ts$/,
+  routes: /\.routes\.ts$|(^|\/)index\.ts$/,
+  schemas: /\.schema\.ts$/,
+  services: /\.service\.ts$/,
+  utils: /\.util\.ts$/,
+};
+
+const sourceFiles = (layer: string) =>
+  readdirSync(join(SRC, layer), { recursive: true, encoding: 'utf8' })
+    .map((file) => file.replaceAll('\\', '/'))
+    .filter((file) => file.endsWith('.ts'))
+    .map((file) => file.replace(/\.test\.ts$/, '.ts'));
+
+describe('file naming', () => {
+  for (const [layer, rule] of Object.entries(RULES)) {
+    it(`gives every file in ${layer}/ its layer's suffix`, () => {
+      const wrong = sourceFiles(layer).filter((file) => !rule.test(file));
+      assert.deepEqual(wrong, [], `rename these in ${layer}/ to match ${rule}`);
+    });
+  }
+
+  it('names only folders that exist, so a misspelt rule cannot pass by checking nothing', () => {
+    const folders = readdirSync(SRC, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+    for (const layer of Object.keys(RULES)) assert.ok(folders.includes(layer), layer);
+  });
+});

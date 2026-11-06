@@ -1,6 +1,6 @@
 import type { Response } from 'express';
-import { IDEMPOTENCY_REPLAY_HEADERS } from '#constants/idempotency.constants';
-import { concatenateStrings } from '#utils/concateStrings';
+import { IDEMPOTENCY_REPLAY_HEADERS } from '#constants/idempotency.constant';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import type { StoredResponse } from './types.ts';
 
 const headerValue = (value: string | number | readonly string[]) =>

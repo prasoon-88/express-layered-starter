@@ -15,7 +15,7 @@
 
 A route definition is data: "this URL, this access rule → these handlers."
 
-Request validation isn't attached here either. The controller declares its own schemas with [`route()`](../lib/http/route.lib.ts) (see [`controllers/`](../controllers/README.md#validated-endpoints-with-route)), and `routes/` may not import `lib/`.
+Request validation isn't attached here either. The controller declares its own schemas with [`route()`](../lib/http/route.ts) (see [`controllers/`](../controllers/README.md#validated-endpoints-with-route)), and `routes/` may not import `lib/`.
 
 ## Example
 
@@ -50,7 +50,7 @@ The function receives only the keys its type names. A [module](../modules/README
 
 ```
 app.ts                    the route tree: /health, then / (global limit + timeout) → web, /api
-├── health/index.ts       /health, /health/ready, /health/live
+├── health/health.routes.ts /health, /health/ready, /health/live
 ├── web/index.ts          server-rendered pages (EJS), urlencoded forms
 └── api/index.ts          express.json(), then unversioned modules, then each version
     ├── docs.routes.ts    /docs/openapi.json

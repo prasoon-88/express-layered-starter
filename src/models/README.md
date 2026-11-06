@@ -32,7 +32,7 @@ const postSchema = new Schema({
     createdAt: { type: Date, default: Date.now },
 })
 
-export default model('Post', postSchema)
+export const PostModel = model('Post', postSchema)
 ```
 
 ## Rule of thumb

@@ -1,4 +1,4 @@
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import type { RequestHandler, Request } from 'express';
 import type { RateLimitEngine } from './engine.ts';
 import { UnknownPolicyError } from './errors.ts';
@@ -6,8 +6,9 @@ import { rateLimitHeaders } from './headers.ts';
 import { keys, type KeyFn } from './keys.ts';
 import type { PolicyName } from './policies.ts';
 import type { Policy } from './types.ts';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
 import { ServiceUnavailableError, TooManyRequestsError } from '#errors';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 type PolicyRef = PolicyName | Policy;
 
@@ -75,7 +76,10 @@ export const createLimit = ({ enabled, engine, skipPaths, ipv6Subnet }: LimitCon
       res.set(rateLimitHeaders(d));
 
       if (!d.allowed) {
-        res.set(HTTP_HEADERS.RETRY_AFTER, Math.max(1, Math.ceil(d.resetMs / 1000)).toString());
+        res.set(
+          HTTP_HEADERS.RETRY_AFTER,
+          Math.max(1, Math.ceil(d.resetMs / MS_PER_SECOND)).toString(),
+        );
         throw new TooManyRequestsError();
       }
 

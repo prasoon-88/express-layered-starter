@@ -1,5 +1,5 @@
-import InternalServerError from '#errors/internalServer.error';
-import UnprocessableEntityError from '#errors/unprocessableEntity.error';
+import { InternalServerError } from '#errors/internalServer.error';
+import { UnprocessableEntityError } from '#errors/unprocessableEntity.error';
 
 const PAGINATION_LIMITS = Object.freeze({
   PAGE: 1,
@@ -9,26 +9,26 @@ const PAGINATION_LIMITS = Object.freeze({
 });
 
 // page/pageSize usually come straight from req.query, so they are `unknown` until parsed.
-export interface PageQuery {
+export type PageQuery = {
   page?: unknown;
   pageSize?: unknown;
-}
+};
 
-export interface PaginationInput extends PageQuery {
+export type PaginationInput = PageQuery & {
   total: unknown;
-}
+};
 
-interface FetchPageResult<T> {
+type FetchPageResult<T> = {
   items: readonly T[];
   total: number | bigint | string;
-}
+};
 
-interface IntRule {
+type IntRule = {
   min: number;
   max: number;
   field: string;
   fallback: number;
-}
+};
 
 const toIntStrict = (value: unknown, { min, max, field, fallback }: IntRule) => {
   if (value === undefined || value === null || value === '') return fallback;

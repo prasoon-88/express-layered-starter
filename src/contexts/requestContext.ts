@@ -1,8 +1,8 @@
-import createContext from './createContext.ts';
+import { createContext } from './createContext.ts';
 
-interface RequestStore {
+type RequestStore = {
   requestId: string;
-}
+};
 
 const context = createContext<RequestStore>();
 
@@ -11,12 +11,10 @@ const STORE_KEYS = Object.freeze({
   REQUEST_ID: 'requestId',
 } satisfies Record<string, keyof RequestStore>);
 
-const requestContext = {
+export const requestContext = {
   STORE_KEYS,
 
   run: context.run,
 
   getRequestId: () => context.get(STORE_KEYS.REQUEST_ID),
 };
-
-export default requestContext;

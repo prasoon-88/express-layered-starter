@@ -1,4 +1,4 @@
-import ENV_CONSTANTS from '#constants/env/index';
+import { ENV_CONSTANTS } from '#constants/env/index';
 
 const isProd = ENV_CONSTANTS.NODE_ENV === 'production';
 

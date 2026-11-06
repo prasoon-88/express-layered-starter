@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { type Request } from 'express';
 import { ipKeyGenerator } from 'express-rate-limit';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import type { AuthUser } from '#schemas/user.schema';
 
 export type KeyContext = {

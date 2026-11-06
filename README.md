@@ -13,8 +13,8 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Request IDs, propagated without passing `req` around | [`contexts/`](src/contexts/) · [`requestId.middleware.ts`](src/middlewares/requestId.middleware.ts) |
 | Structured JSON logging with secret redaction | [`lib/logger/`](src/lib/logger/) · [`logger.config.ts`](src/config/logger.config.ts) |
 | HTTP access logs with duration + slow-request warnings | [`httpLogger.middleware.ts`](src/middlewares/httpLogger.middleware.ts) |
-| Error class hierarchy + converters + central handler | [`errors/`](src/errors/) · [`error.middleware.ts`](src/middlewares/error.middleware.ts) |
-| Request validation (body, query, params, response) with Zod | [`lib/http/route.lib.ts`](src/lib/http/route.lib.ts) · [`zod.converter.ts`](src/errors/converter/zod.converter.ts) |
+| Error class hierarchy + converters + central handler | [`errors/`](src/errors/) · [`errorHandler.middleware.ts`](src/middlewares/errorHandler.middleware.ts) |
+| Request validation (body, query, params, response) with Zod | [`lib/http/route.ts`](src/lib/http/route.ts) · [`zod.converter.ts`](src/errors/converter/zod.converter.ts) |
 | Uniform success/error response envelope | [`apiResponse.util.ts`](src/utils/apiResponse.util.ts) |
 | Validated pagination (parse, clamp, build meta) | [`paginator.util.ts`](src/utils/paginator.util.ts) |
 | Graceful shutdown + process-level crash handling | [`lib/lifecycle/`](src/lib/lifecycle/) · [`server.ts`](src/server.ts) |
@@ -23,7 +23,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | Idempotency: `Idempotency-Key` replay of a completed `POST`/`PATCH`, conflict and reuse detection, in-memory or Redis | [`src/idempotency/`](src/idempotency/) |
 | CORS, off by default; origins, credentials, methods and headers validated at boot | [`cors.middleware.ts`](src/middlewares/cors.middleware.ts) · [`cors.config.ts`](src/config/cors.config.ts) |
 | Auth: login, short-lived JWT access tokens, rotating refresh tokens with reuse detection, logout | [Authentication](#authentication) · [`auth.service.ts`](src/services/auth.service.ts) · [`authenticate.middleware.ts`](src/middlewares/authenticate.middleware.ts) |
-| OpenAPI 3.1 document at `GET /api/docs/openapi.json`, generated from the mounted routes and their Zod schemas | [OpenAPI](#openapi) · [`openapi.lib.ts`](src/lib/http/openapi.lib.ts) |
+| OpenAPI 3.1 document at `GET /api/docs/openapi.json`, generated from the mounted routes and their Zod schemas | [OpenAPI](#openapi) · [`openapi.ts`](src/lib/http/openapi.ts) |
 | Docker image (multi-stage, non-root, healthcheck) and a Compose file with Redis | [Docker](#docker) · [`Dockerfile`](Dockerfile) · [`compose.yaml`](compose.yaml) |
 | OpenTelemetry traces and metrics over OTLP (HTTP, Express, Redis), off until an endpoint is set; trace ids in every log line; Jaeger in Compose | [Observability](#observability) · [`lib/telemetry/`](src/lib/telemetry/) · [`instrumentation.ts`](src/instrumentation.ts) |
 | A working end-to-end endpoint to copy: `POST /api/v1/user/register` | [`user.controller.ts`](src/controllers/api/v1/user.controller.ts) · [`user.service.ts`](src/services/user.service.ts) |
@@ -36,7 +36,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 |------|---------|
 | [Express 5](https://expressjs.com/) | Web framework / HTTP server |
 | [pino](https://getpino.io/) | Structured JSON logging (`pino-pretty` in dev) |
-| [Zod 4](https://zod.dev/) | Request and response validation through [`route()`](src/lib/http/route.lib.ts) |
+| [Zod 4](https://zod.dev/) | Request and response validation through [`route()`](src/lib/http/route.ts) |
 | [EJS](https://ejs.co/) | Server-side rendered views |
 | [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | Access tokens (HS256), wrapped in [`lib/auth/accessToken.ts`](src/lib/auth/accessToken.ts) |
 | [helmet](https://helmetjs.github.io/) | Security headers, mounted on every response |
@@ -285,11 +285,11 @@ The handler normalizes anything thrown — including framework errors from JWT o
 
 ## Request validation
 
-Wrap a controller in [`route()`](src/lib/http/route.lib.ts) and give it Zod schemas. The handler receives parsed, typed input, and whatever it returns is sent as `data` in the same envelope `apiResponse` uses (see [Responses](#responses)):
+Wrap a controller in [`route()`](src/lib/http/route.ts) and give it Zod schemas. The handler receives parsed, typed input, and whatever it returns is sent as `data` in the same envelope `apiResponse` uses (see [Responses](#responses)):
 
 ```js
 import { z } from 'zod'
-import { route } from '#lib/http/route.lib'
+import { route } from '#lib/http/route'
 
 export const createUser = route(
     { body: z.object({ email: z.email(), name: z.string().min(1) }) },
@@ -410,7 +410,7 @@ Liveness and readiness fail for different reasons and the platform reacts differ
 ### Design notes
 
 - **No auth, no rate limiting in front of them.** A probe carries no credentials and must never get a `401` or `429`, which is why they mount before anything like that is added.
-- **Probes get JSON, not an HTML error page.** The error handler negotiates `application/json` first (see [`wantsJson`](src/middlewares/error.middleware.ts)), so a `Accept: */*` probe — which is what kubelet and `curl` send — receives the JSON envelope. The draining `503` is logged at `warn`, not `error`, because shutting down is expected, not a fault.
+- **Probes get JSON, not an HTML error page.** The error handler negotiates `application/json` first (see [`wantsJson`](src/middlewares/errorHandler.middleware.ts)), so a `Accept: */*` probe — which is what kubelet and `curl` send — receives the JSON envelope. The draining `503` is logged at `warn`, not `error`, because shutting down is expected, not a fault.
 
 In Kubernetes these map to the **startup**, **liveness** and **readiness** probes; set `SHUTDOWN_DELAY_MS` longer than the readiness probe interval so the drain outlasts one failed probe. The per-platform numbers are in [`src/lib/README.md`](src/lib/README.md#lifecycle).
 
@@ -457,10 +457,10 @@ await tracer.startActiveSpan('charge', async (span) => {
 ## Conventions
 
 - **ES Modules** — use `import` / `export`. Relative imports include the `.ts` extension (`./app.error.ts`).
-- **Subpath imports** — import across folders with `#services/user.service` (no extension), never `../../services/...`.
+- **Subpath imports** — import across folders with `#services/user.service` (no extension), never `../../services/...`. A relative `./x.ts` is only for a file in the same folder; a subfolder is a different folder. Both are checked by lint.
 - **Config vs constants** — tunable/env-dependent values go in `config/`; fixed facts go in `constants/`. `config/` may import `constants/`, never the reverse.
-- **Naming** — files are `name.layer.ts` (`user.service.ts`); constants use `UPPERCASE_SNAKE_CASE`.
-- **Secrets** — only ever in `.env`; config files *read* them via `process.env`, never hardcode. Add new sensitive field names to `redactPaths` in [`config/logger.config.ts`](src/config/logger.config.ts).
+- **Naming** — files in a layer folder are `name.layer.ts` (`user.service.ts`), checked by a test; named exports only and `type` over `interface`, checked by lint; middleware factories are `create<Name>Middleware`; constants use `UPPERCASE_SNAKE_CASE`. The full list is in [`src/README.md`](src/README.md#naming-and-code-conventions).
+- **Secrets** — only ever in `.env`; [`constants/env/`](src/constants/env/) reads them from `process.env`, never hardcode. Add new sensitive field names to `redactPaths` in [`config/logger.config.ts`](src/config/logger.config.ts).
 - **Error path first** — for every operation that can fail, handle the failure. Throw a typed error rather than returning `null` and checking upstream.
 
 ## Scripts

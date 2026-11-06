@@ -1,8 +1,8 @@
-import AppError from './app.error.ts';
-import ERROR_CODES from '#constants/error/errorCodes.constant';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { AppError } from './app.error.ts';
+import { ERROR_CODES } from '#constants/error/errorCodes.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
 
-class RequestTimeoutError extends AppError {
+export class RequestTimeoutError extends AppError {
   constructor(timeoutMs: number) {
     super(
       `Request exceeds ${timeoutMs}ms`,
@@ -11,5 +11,3 @@ class RequestTimeoutError extends AppError {
     );
   }
 }
-
-export default RequestTimeoutError;

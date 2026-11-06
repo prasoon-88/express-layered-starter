@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import pino from 'pino';
 import { RateLimiterMemory, type RateLimiterAbstract } from 'rate-limiter-flexible';
-import type { StoreErrorMode } from '#constants/rateLimit.constants';
+import type { RateLimitStoreErrorMode } from '#constants/rateLimit.constant';
 import { createRateLimitEngine } from './engine.ts';
 import { buildDefaultPolicies, createPolicyRegistry } from './policies.ts';
 
@@ -26,7 +26,10 @@ const brokenStore = () =>
     consume: () => Promise.reject(new Error('connection lost')),
   }) as unknown as RateLimiterAbstract;
 
-const engineWith = (onStoreError: StoreErrorMode, limiterFactory?: () => RateLimiterAbstract) =>
+const engineWith = (
+  onStoreError: RateLimitStoreErrorMode,
+  limiterFactory?: () => RateLimiterAbstract,
+) =>
   createRateLimitEngine({
     policies: policies(),
     prefix: 'test',

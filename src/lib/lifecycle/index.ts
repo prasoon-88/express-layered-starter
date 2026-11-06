@@ -3,11 +3,11 @@ import type { Logger } from 'pino';
 import { lifecycleConfig } from '#config/lifecycle.config';
 import { getLogger } from '#lib/logger/index';
 import { sleep } from '#utils/sleep.util';
-import lifecycleState from './state.ts';
+import { lifecycleState } from './state.ts';
 
 type ShutdownHook = () => void | Promise<void>;
 
-interface ProcessHandlerOptions {
+type ProcessHandlerOptions = {
   server: Server;
   hooks?: ShutdownHook[];
   logger?: Logger;
@@ -16,7 +16,7 @@ interface ProcessHandlerOptions {
   /** Injectable for tests; defaults to the real `process`. */
   proc?: Pick<NodeJS.EventEmitter, 'on'>;
   exit?: (code: number) => void;
-}
+};
 
 const toError = (value: unknown) => (value instanceof Error ? value : new Error(String(value)));
 

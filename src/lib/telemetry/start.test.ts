@@ -9,8 +9,8 @@ process.env.OTEL_SDK_DISABLED = 'false';
 
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
+import { listen } from '#testing/http';
 
 // startTelemetry and shutdownTelemetry in this process. The end-to-end test (index.test.ts)
 // proves what gets traced through the real preload; this one the start/shutdown contract. The
@@ -18,25 +18,24 @@ import { createServer } from 'node:http';
 // which would make this process's coverage report meaningless.
 
 const received: string[] = [];
-const receiver = createServer((req, res) => {
-  let raw = '';
-  req.setEncoding('utf8');
-  req.on('data', (chunk: string) => (raw += chunk));
-  req.on('end', () => {
-    received.push(raw);
-    res.writeHead(200, { 'Content-Type': 'application/json' }).end('{}');
-  });
-});
-
+let receiver: Server;
 let state: typeof import('./state.ts');
 let startTelemetry: typeof import('./index.ts').startTelemetry;
 
 before(async () => {
-  receiver.listen(0, '127.0.0.1');
-  await once(receiver, 'listening');
-  const address = receiver.address();
-  assert.ok(address && typeof address === 'object');
-  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `http://127.0.0.1:${address.port}`;
+  let baseUrl: string;
+  ({ server: receiver, baseUrl } = await listen(
+    createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => (raw += chunk));
+      req.on('end', () => {
+        received.push(raw);
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end('{}');
+      });
+    }),
+  ));
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = baseUrl;
 
   state = await import('./state.ts');
   ({ startTelemetry } = await import('./index.ts'));

@@ -1,11 +1,14 @@
+import { SECONDS_PER_MINUTE, SECONDS_PER_DAY } from '#constants/time.constant';
+
 // Access tokens are short-lived: they cannot be revoked, only outlived.
-export const DEFAULT_JWT_ACCESS_TTL_S = 15 * 60;
+export const DEFAULT_JWT_ACCESS_TTL_S = 15 * SECONDS_PER_MINUTE;
 // Refresh tokens can be revoked, so they may live long. Each use replaces the token.
-export const DEFAULT_JWT_REFRESH_TTL_S = 30 * 86_400;
+export const DEFAULT_JWT_REFRESH_TTL_S = 30 * SECONDS_PER_DAY;
 
 // Where refresh tokens live. memory = per instance, lost on restart. redis = shared by replicas.
 export const AUTH_STORES = ['memory', 'redis'] as const;
-export const DEFAULT_AUTH_STORE = 'memory';
+export type AuthStoreName = (typeof AUTH_STORES)[number];
+export const DEFAULT_AUTH_STORE: AuthStoreName = 'memory';
 
 export const JWT_SECRET_MIN_LENGTH = 32;
 // HS256 only. Verification pins it, so a token signed with another algorithm (or "none") is refused.

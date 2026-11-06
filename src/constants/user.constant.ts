@@ -3,8 +3,6 @@ export const USER_ROLES = ['NORMAL', 'ADMIN'] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 
-const USER_CONSTANTS = Object.freeze({
+export const USER_CONSTANTS = Object.freeze({
   USER_ROLES,
 });
-
-export default USER_CONSTANTS;

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 // TStore is the shape of what one context holds, e.g. { requestId: string }.
-const createContext = <TStore extends object>() => {
+export const createContext = <TStore extends object>() => {
   const storage = new AsyncLocalStorage<TStore>();
 
   return {
@@ -10,5 +10,3 @@ const createContext = <TStore extends object>() => {
     getStore: (): TStore | undefined => storage.getStore(),
   };
 };
-
-export default createContext;

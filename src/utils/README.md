@@ -31,7 +31,7 @@ apiResponse.noContent(res)
 apiResponse.pagination(res, items, { total, page, pageSize })
 ```
 
-Every body comes out as `{ success, message, data, requestId }` — the request ID read straight from the [async context](../contexts/), so no layer has to pass it along. Calling it after the response is already sent logs a warning instead of throwing. The body is built by [`successEnvelope.lib.ts`](../lib/http/successEnvelope.lib.ts), the same function [`route()`](../lib/http/route.lib.ts) uses, so both produce one shape.
+Every body comes out as `{ success, message, data, requestId }` — the request ID read straight from the [async context](../contexts/), so no layer has to pass it along. Calling it after the response is already sent logs a warning instead of throwing. The body is built by [`successEnvelope.ts`](../lib/http/successEnvelope.ts), the same function [`route()`](../lib/http/route.ts) uses, so both produce one shape.
 
 ### `paginator.util.ts`
 Turns untrusted `?page=&pageSize=` into safe integers, rejects nonsense with an `UnprocessableEntityError`, clamps to sane maximums, and computes the `meta` block:

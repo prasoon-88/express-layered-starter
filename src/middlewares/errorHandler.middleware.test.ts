@@ -4,7 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
-const { default: errorHandlerMiddleware } = await import('./error.middleware.ts');
+const { errorHandlerMiddleware } = await import('./errorHandler.middleware.ts');
 const { NotFoundError, InternalServerError } = await import('#errors');
 
 class FakeResponse {

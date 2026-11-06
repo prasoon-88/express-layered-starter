@@ -1,4 +1,4 @@
-import type { IdempotencyStoreErrorMode } from '#constants/idempotency.constants';
+import type { IdempotencyStoreErrorMode } from '#constants/idempotency.constant';
 import type { ReadinessCheck } from '#lib/health/index';
 
 type StoreReadinessConfig = {

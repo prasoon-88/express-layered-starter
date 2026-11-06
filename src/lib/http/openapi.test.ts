@@ -5,8 +5,8 @@ import { z } from 'zod';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
-const { route } = await import('./route.lib.ts');
-const { buildOpenApiDocument } = await import('./openapi.lib.ts');
+const { route } = await import('./route.ts');
+const { buildOpenApiDocument } = await import('./openapi.ts');
 
 type Route = Parameters<typeof buildOpenApiDocument>[0]['routes'][number];
 

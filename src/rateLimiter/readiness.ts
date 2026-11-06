@@ -1,10 +1,10 @@
-import type { StoreErrorMode } from '#constants/rateLimit.constants';
+import type { RateLimitStoreErrorMode } from '#constants/rateLimit.constant';
 import type { ReadinessCheck } from '#lib/health/index';
 import type { Redis } from '#lib/redis/index';
 
 type StoreReadinessConfig = {
   redis: Pick<Redis, 'ping'>;
-  onStoreError: StoreErrorMode;
+  onStoreError: RateLimitStoreErrorMode;
 };
 
 // A real round trip, not a flag: with `disableOfflineQueue` a client that lost its connection

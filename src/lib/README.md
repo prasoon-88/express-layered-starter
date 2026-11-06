@@ -33,7 +33,7 @@ A [pino](https://getpino.io/) instance configured from [`config/logger.config.ts
 - **Redaction** of passwords, tokens, cookies, and auth headers before they ever reach a log sink
 - **Base fields** on every line: service, env, pid, hostname
 
-Use a child logger per file so every line says where it came from:
+Use a child logger per file so every line says where it came from. The name is the file name without `.ts` (`user.service`, `requestTimeout.middleware`), or the folder name for an `index.ts` (`health`, `lifecycle`):
 
 ```js
 import { getLogger } from '#lib/logger/index'
@@ -47,7 +47,7 @@ logger.error({ err }, 'could not send welcome email')
 
 Pass the object first, the message second — that's pino's signature, and it's what keeps fields queryable instead of buried in a string. Never build messages with template literals when the value could be a field.
 
-Importing the default export gives you the root logger, which is what the middlewares use.
+The `logger` export is the root logger, which is what the middlewares use.
 
 ### `lifecycle/`
 
@@ -132,11 +132,11 @@ Call it once. Registering twice installs every handler twice. Don't call it from
 
 ### `http/`
 
-`route()` in [`route.lib.ts`](http/route.lib.ts) wraps a controller with [Zod](https://zod.dev/) validation. Give it schemas for any of `body`, `query`, `params` and `response`, then a handler, then options:
+`route()` in [`route.ts`](http/route.ts) wraps a controller with [Zod](https://zod.dev/) validation. Give it schemas for any of `body`, `query`, `params` and `response`, then a handler, then options:
 
 ```js
 import { z } from 'zod'
-import { route } from '#lib/http/route.lib'
+import { route } from '#lib/http/route'
 
 export const listUsers = route(
     {
@@ -159,7 +159,7 @@ It runs in two phases, and the phase an error comes from decides its status:
 | 2. Handler | it throws anything else, rejects, or throws a `ZodError` | `500 INTERNAL_ERROR`, generic message |
 | 2. Response | the return value doesn't match `response` | `500 INTERNAL_ERROR`; the mismatch is logged, never sent |
 
-`route()` never builds an error response itself. `lib/` may not import `errors/`, so it only calls `next(err)`. The [Zod converter](../errors/converter/zod.converter.ts) turns the input `ZodError` into a `BadRequestError`, and the [error handler](../middlewares/error.middleware.ts) sends it.
+`route()` never builds an error response itself. `lib/` may not import `errors/`, so it only calls `next(err)`. The [Zod converter](../errors/converter/zod.converter.ts) turns the input `ZodError` into a `BadRequestError`, and the [error handler](../middlewares/errorHandler.middleware.ts) sends it.
 
 #### Behaviors worth knowing
 
@@ -170,12 +170,12 @@ It runs in two phases, and the phase an error comes from decides its status:
 - **Async rules work.** Parsing uses `safeParseAsync`, so `.refine(async …)` is fine. A refine or transform that *throws*, rather than returning `false`, is a bug and becomes a `500`.
 - **A `ZodError` from inside the handler is a `500`, not a `400`.** Validating a database row or an upstream reply checks *your* data; if it fails, the client did nothing wrong. To reject a request for a business reason, throw a typed error (`BadRequestError`, `UnprocessableEntityError`) from the service.
 - **`response` is an allowlist.** It describes `data`. The parsed value is what gets sent, so fields the schema doesn't name (`passwordHash`) are stripped before they leave.
-- **The return value becomes `data` in the standard envelope**, `{ success, message, data, requestId }`, exactly what [`apiResponse`](../utils/apiResponse.util.ts) sends. Both build it with [`successEnvelope.lib.ts`](http/successEnvelope.lib.ts), so a client sees one success shape whichever way the handler responds. The `status` option picks the status code and the default message (`201` → `Created`, `202` → `Accepted`). `204` sends no body, and a handler that returns nothing gets `data: null`.
+- **The return value becomes `data` in the standard envelope**, `{ success, message, data, requestId }`, exactly what [`apiResponse`](../utils/apiResponse.util.ts) sends. Both build it with [`successEnvelope.ts`](http/successEnvelope.ts), so a client sees one success shape whichever way the handler responds. The `status` option picks the status code and the default message (`201` → `Created`, `202` → `Accepted`). `204` sends no body, and a handler that returns nothing gets `data: null`.
 - **The handler can still respond itself**, for a redirect or `apiResponse.pagination(res, …)` (the handler receives `(input, req, res)`). `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
 - **Built for JSON routes.** On a non-`/api` route a `400` renders the `error` view, which shows the message but not `details`.
 - **The schemas can be read back.** `getRouteContract(handler)` returns the frozen `{ body?, query?, params?, response?, status }` that a `route()` handler validates with, or `undefined` for any other function. The OpenAPI document is built from it, so what it documents is what is enforced.
 
-`buildOpenApiDocument({ title, version, routes })` in [`openapi.lib.ts`](http/openapi.lib.ts) turns mounted routes and their contracts into an OpenAPI 3.1 document. It takes routes as a plain shape rather than the `http/` manifest type, since `lib/` may not import `http/`. It throws, naming the route, when a schema has no JSON Schema form (`z.date()`, `z.bigint()`, `z.custom()`, a transform in a `response`) or when `query` or `params` is not an object. What ends up in the document is described in the root [README](../../README.md#openapi).
+`buildOpenApiDocument({ title, version, routes })` in [`openapi.ts`](http/openapi.ts) turns mounted routes and their contracts into an OpenAPI 3.1 document. It takes routes as a plain shape rather than the `http/` manifest type, since `lib/` may not import `http/`. It throws, naming the route, when a schema has no JSON Schema form (`z.date()`, `z.bigint()`, `z.custom()`, a transform in a `response`) or when `query` or `params` is not an object. What ends up in the document is described in the root [README](../../README.md#openapi).
 
 ### `auth/`
 

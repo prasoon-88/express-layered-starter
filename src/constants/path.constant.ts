@@ -3,7 +3,7 @@ import { resolve } from 'path';
 // Two levels up from src/constants (dev) or dist/constants (prod): the project root either way.
 const ROOT = resolve(import.meta.dirname, '../..');
 
-const PATHS = Object.freeze({
+export const PATHS = Object.freeze({
   ROOT,
   // Static assets are not compiled, so they stay at the project root in dev and in prod.
   PUBLIC: Object.freeze({ name: 'public', path: resolve(ROOT, 'public') }),
@@ -11,5 +11,3 @@ const PATHS = Object.freeze({
   // (`pnpm build` copies them there), so dist/ runs without src/ present.
   VIEWS: Object.freeze({ name: 'views', path: resolve(import.meta.dirname, '../views') }),
 });
-
-export default PATHS;

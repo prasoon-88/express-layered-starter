@@ -1,9 +1,8 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express, { type RequestHandler, type Router } from 'express';
+import { listen } from '#testing/http';
 import { createContainer } from './container.ts';
 import { ContainerError, RouteDefinitionError } from './errors.ts';
 import { mount } from './mount.ts';
@@ -27,10 +26,9 @@ const serve = async (router: Router) => {
   app.use((_req, res) => {
     res.status(404).json({ fellThrough: true });
   });
-  const server = app.listen(0);
+  const { server, baseUrl } = await listen(app);
   servers.push(server);
-  await once(server, 'listening');
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return baseUrl;
 };
 
 const say =

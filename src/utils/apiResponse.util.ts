@@ -1,21 +1,21 @@
 import type { Response } from 'express';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import { buildSuccessBody } from '#lib/http/successEnvelope.lib';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { buildSuccessBody } from '#lib/http/successEnvelope';
 import { Paginator, type PaginationInput } from '#utils/paginator.util';
 import { getLogger } from '#lib/logger/index';
 
-const logger = getLogger('apiResponse');
+const logger = getLogger('apiResponse.util');
 
 const ERROR_MESSAGES = {
   REDIRECT_REQUIRE_URL: 'redirect requires a url',
 };
 
-interface SendOptions {
+type SendOptions = {
   message?: string;
   data?: unknown;
   meta?: Record<string, unknown>;
   headers?: Record<string, string>;
-}
+};
 
 type ResponseOptions = Omit<SendOptions, 'data'>;
 

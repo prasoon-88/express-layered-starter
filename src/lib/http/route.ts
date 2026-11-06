@@ -1,8 +1,8 @@
 import type { Request, Response, RequestHandler } from 'express';
 import { ZodError, ZodRealError } from 'zod';
 import type { z, ZodType } from 'zod';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import { buildSuccessBody } from './successEnvelope.lib.ts';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { buildSuccessBody } from './successEnvelope.ts';
 
 type Schemas = {
   body?: ZodType;

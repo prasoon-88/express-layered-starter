@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { ConflictError } from '#errors';
-import ERROR_CODES from '#constants/error/errorCodes.constant';
-import { concatenateStrings } from '#utils/concateStrings';
+import { ERROR_CODES } from '#constants/error/errorCodes.constant';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import { fingerprint } from './fingerprint.ts';
 import type { Policy } from './types.ts';
 import type { IdempotencyStore } from './types.ts';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 export type RunResult<T> = { skipped: true } | { skipped: false; value: T };
 
@@ -29,7 +30,7 @@ export const createRun = ({ store, prefix, log }: RunConfig): Run => {
     const result = await store.acquire(
       storageKey,
       { state: 'in_progress', fingerprint: digest, token, startedAt: Date.now() },
-      options.lockTtlS * 1000,
+      options.lockTtlS * MS_PER_SECOND,
     );
 
     if (!result.acquired) {
@@ -46,7 +47,7 @@ export const createRun = ({ store, prefix, log }: RunConfig): Run => {
         storageKey,
         token,
         { state: 'completed', fingerprint: digest, completedAt: Date.now() },
-        options.ttlS * 1000,
+        options.ttlS * MS_PER_SECOND,
       );
       if (!saved) log.warn({ name }, 'idempotency complete rejected');
       return { skipped: false, value };

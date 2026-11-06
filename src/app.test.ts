@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import pino from 'pino';
 import { initIdempotency } from '#idempotency';
 import { closeRedisClient, createRedisClient, type Redis } from '#lib/redis/index';
+import { listen, postJson } from '#testing/http';
 import { freePort, redisSkip, startRedisServer } from '#testing/redisServer';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
@@ -15,7 +16,7 @@ const { parseEnv } = await import('#constants/env/schema');
 
 type AppOptions = Parameters<typeof createApp>[0];
 
-const listen = async (
+const startApp = (
   options: Pick<AppOptions, 'rl' | 'readinessChecks'> & Partial<Pick<AppOptions, 'idempotency'>>,
 ) => {
   const { app } = createApp({
@@ -23,11 +24,7 @@ const listen = async (
     idempotency: { idempotent: () => passThrough },
     ...options,
   });
-  const server = app.listen(0);
-  await new Promise((resolve) => server.once('listening', resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
-  return { server, baseUrl: `http://127.0.0.1:${address.port}` };
+  return listen(app);
 };
 
 const passThrough: RequestHandler = (_req, _res, next) => {
@@ -45,7 +42,7 @@ describe('createApp middleware order', () => {
       next();
     };
 
-    ({ server, baseUrl } = await listen({ rl: { limit: () => countLimited } }));
+    ({ server, baseUrl } = await startApp({ rl: { limit: () => countLimited } }));
   });
 
   after(() => {
@@ -151,7 +148,7 @@ describe('createApp health endpoints', () => {
 
   const servers: Server[] = [];
   const start = async (readinessChecks: AppOptions['readinessChecks']) => {
-    const started = await listen({ rl, readinessChecks });
+    const started = await startApp({ rl, readinessChecks });
     servers.push(started.server);
     return started.baseUrl;
   };
@@ -217,7 +214,7 @@ describe('POST /api/v1/user/register', () => {
       parseEnv({ NODE_ENV: 'test', SERVICE_NAME: 'register-idem' }),
       pino({ level: 'silent' }),
     );
-    ({ server, baseUrl } = await listen({
+    ({ server, baseUrl } = await startApp({
       rl: {
         limit: ((policy: unknown) => {
           limitedWith.push(policy);
@@ -232,12 +229,8 @@ describe('POST /api/v1/user/register', () => {
     server.close();
   });
 
-  const post = (body: unknown) =>
-    fetch(`${baseUrl}/api/v1/user/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+  const post = (body: unknown, headers?: Record<string, string>) =>
+    postJson(`${baseUrl}/api/v1/user/register`, body, headers);
 
   const valid = { fullName: 'Ada Lovelace', email: 'Ada@Example.com', password: 'correct-horse-1' };
 
@@ -286,19 +279,11 @@ describe('POST /api/v1/user/register', () => {
   });
 
   it('replays the first response when the same Idempotency-Key is sent again', async () => {
-    const headers = { 'Content-Type': 'application/json', 'Idempotency-Key': 'replay-key-1' };
-    const payload = JSON.stringify({ ...valid, email: 'replay@example.com' });
-    const first = await fetch(`${baseUrl}/api/v1/user/register`, {
-      method: 'POST',
-      headers,
-      body: payload,
-    });
+    const headers = { 'Idempotency-Key': 'replay-key-1' };
+    const payload = { ...valid, email: 'replay@example.com' };
+    const first = await post(payload, headers);
     const firstBody = await first.json();
-    const second = await fetch(`${baseUrl}/api/v1/user/register`, {
-      method: 'POST',
-      headers,
-      body: payload,
-    });
+    const second = await post(payload, headers);
 
     assert.equal(first.status, 201);
     assert.equal(second.status, 201);
@@ -307,17 +292,9 @@ describe('POST /api/v1/user/register', () => {
   });
 
   it('rejects the same Idempotency-Key when the body differs', async () => {
-    const headers = { 'Content-Type': 'application/json', 'Idempotency-Key': 'replay-key-2' };
-    const first = await fetch(`${baseUrl}/api/v1/user/register`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...valid, email: 'replay-a@example.com' }),
-    });
-    const second = await fetch(`${baseUrl}/api/v1/user/register`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...valid, email: 'replay-b@example.com' }),
-    });
+    const headers = { 'Idempotency-Key': 'replay-key-2' };
+    const first = await post({ ...valid, email: 'replay-a@example.com' }, headers);
+    const second = await post({ ...valid, email: 'replay-b@example.com' }, headers);
     const body = (await second.json()) as { code: string };
 
     assert.equal(first.status, 201);
@@ -338,7 +315,7 @@ describe('auth flow over HTTP', () => {
   };
 
   before(async () => {
-    ({ server, baseUrl } = await listen({
+    ({ server, baseUrl } = await startApp({
       rl: {
         limit: ((policy: unknown) => {
           limitedWith.push(policy);
@@ -360,12 +337,7 @@ describe('auth flow over HTTP', () => {
     password: 'correct-horse-1',
   };
 
-  const post = (path: string, body: unknown) =>
-    fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+  const post = (path: string, body: unknown) => postJson(`${baseUrl}${path}`, body);
 
   const login = async () => {
     const response = await post('/api/v1/auth/login', {
@@ -430,7 +402,7 @@ describe('auth flow over HTTP', () => {
   });
 
   it('refuses an access token from an app with another secret', async () => {
-    const other = await listen({ rl: { limit: () => passThrough } });
+    const other = await startApp({ rl: { limit: () => passThrough } });
     try {
       const response = await me(`Bearer ${(await login()).accessToken}`);
       assert.equal(response.status, 200, 'accepted where it was issued');
@@ -494,11 +466,7 @@ describe('auth flow over HTTP', () => {
   };
 
   const authed = (path: string, accessToken: string, body?: unknown) =>
-    fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-      ...(body !== undefined && { body: JSON.stringify(body) }),
-    });
+    postJson(`${baseUrl}${path}`, body, { Authorization: `Bearer ${accessToken}` });
 
   it('ends every session with POST /auth/logout-all, and needs an access token for it', async () => {
     const { signIn } = await freshUser();
@@ -606,52 +574,42 @@ describe('sessions shared through Redis (AUTH_STORE=redis)', { skip: redisSkip }
       idempotency: { idempotent: () => passThrough },
       redis,
     });
-    const server = app.listen(0);
+    const { server, baseUrl } = await listen(app);
     servers.push(server);
-    await new Promise((resolve) => server.once('listening', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    return `http://127.0.0.1:${address.port}/api/v1`;
+    return `${baseUrl}/api/v1`;
   };
-
-  const post = (url: string, body: unknown) =>
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
 
   // Users are still per app (main has no database), so the user lives on replica a only. The
   // reuse check runs before the user lookup, which is what lets replica b act on a's tokens.
   it('detects on one replica the reuse of a token another replica rotated', async () => {
     const [a, b] = [await replica(), await replica()];
     const user = { fullName: 'Ada', email: 'replica@example.com', password: 'correct-horse-1' };
-    assert.equal((await post(`${a}/user/register`, user)).status, 201);
+    assert.equal((await postJson(`${a}/user/register`, user)).status, 201);
 
     type Pair = { data: { refreshToken: string } };
-    const login = await post(`${a}/auth/login`, { email: user.email, password: user.password });
+    const login = await postJson(`${a}/auth/login`, { email: user.email, password: user.password });
     const first = ((await login.json()) as Pair).data;
-    const rotated = await post(`${a}/auth/refresh`, { refreshToken: first.refreshToken });
+    const rotated = await postJson(`${a}/auth/refresh`, { refreshToken: first.refreshToken });
     assert.equal(rotated.status, 200);
     const second = ((await rotated.json()) as Pair).data;
 
-    const reusedOnB = await post(`${b}/auth/refresh`, { refreshToken: first.refreshToken });
+    const reusedOnB = await postJson(`${b}/auth/refresh`, { refreshToken: first.refreshToken });
     assert.equal(reusedOnB.status, 401);
 
     // Only true when b revoked the family in the store a reads from.
-    const afterOnA = await post(`${a}/auth/refresh`, { refreshToken: second.refreshToken });
+    const afterOnA = await postJson(`${a}/auth/refresh`, { refreshToken: second.refreshToken });
     assert.equal(afterOnA.status, 401, 'b revoked the family for every replica');
   });
 
   it('logs out on one replica a login made on another', async () => {
     const [a, b] = [await replica(), await replica()];
     const user = { fullName: 'Ada', email: 'logout@example.com', password: 'correct-horse-1' };
-    await post(`${a}/user/register`, user);
-    const login = await post(`${a}/auth/login`, { email: user.email, password: user.password });
+    await postJson(`${a}/user/register`, user);
+    const login = await postJson(`${a}/auth/login`, { email: user.email, password: user.password });
     const { refreshToken } = ((await login.json()) as { data: { refreshToken: string } }).data;
 
-    assert.equal((await post(`${b}/auth/logout`, { refreshToken })).status, 204);
-    assert.equal((await post(`${a}/auth/refresh`, { refreshToken })).status, 401);
+    assert.equal((await postJson(`${b}/auth/logout`, { refreshToken })).status, 204);
+    assert.equal((await postJson(`${a}/auth/refresh`, { refreshToken })).status, 401);
   });
 });
 
@@ -670,7 +628,7 @@ describe('GET /api/docs/openapi.json', () => {
   };
 
   before(async () => {
-    ({ server, baseUrl } = await listen({ rl: { limit: () => passThrough } }));
+    ({ server, baseUrl } = await startApp({ rl: { limit: () => passThrough } }));
     routes = createApp({
       env: parseEnv({ NODE_ENV: 'test' }),
       rl: { limit: () => passThrough },
@@ -741,16 +699,12 @@ describe('createApp dependency isolation', () => {
 
   it('gives each app its own services, so two apps never share users', async () => {
     const register = async () => {
-      const started = await listen({ rl: { limit: () => passThrough } });
+      const started = await startApp({ rl: { limit: () => passThrough } });
       servers.push(started.server);
-      return fetch(`${started.baseUrl}/api/v1/user/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: 'Grace Hopper',
-          email: 'grace@example.com',
-          password: 'correct-horse-2',
-        }),
+      return postJson(`${started.baseUrl}/api/v1/user/register`, {
+        fullName: 'Grace Hopper',
+        email: 'grace@example.com',
+        password: 'correct-horse-2',
       });
     };
 

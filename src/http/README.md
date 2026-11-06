@@ -36,7 +36,7 @@ The tree in [`app.ts`](../app.ts) is the whole URL space on one screen:
 defineGroup('/', [
   ...probeModules,                                      // /health, before the global limit
   defineGroup('/', [...pageModules, apiRoutes([...apiModules, apiV1Routes(apiV1Modules)])], {
-    use: [rl.limit('global'), requestTimeoutMiddleware(env.REQUEST_HANDLER_TIMEOUT_MS)],
+    use: [rl.limit('global'), createRequestTimeoutMiddleware(env.REQUEST_HANDLER_TIMEOUT_MS)],
   }),
 ])
 ```
@@ -188,7 +188,7 @@ A group's `use` runs for every request whose path starts with the prefix, includ
 
 - [`container.test.ts`](container.test.ts), [`paths.test.ts`](paths.test.ts) and [`mount.test.ts`](mount.test.ts) cover every rule above, against a real Express server.
 - A module can be mounted alone with a fresh container and fakes for only the keys it needs.
-- `createApp` returns `{ app, routes }`. `routes` lists every route's method, full path, access rule, module and `controller` (its last handler, whose [`route()`](../lib/http/route.lib.ts) schemas the OpenAPI document reads), and is what the public-route test reads.
+- `createApp` returns `{ app, routes }`. `routes` lists every route's method, full path, access rule, module and `controller` (its last handler, whose [`route()`](../lib/http/route.ts) schemas the OpenAPI document reads), and is what the public-route test reads.
 
 ## Dependency rules
 

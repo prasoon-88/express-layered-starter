@@ -1,6 +1,6 @@
 import type { Registry } from '#http/registry';
 import { defineGroup, defineRoute } from '#http/routes';
-import { noStore } from '#middlewares/noStore.middleware';
+import { noStoreMiddleware } from '#middlewares/noStore.middleware';
 
 type AuthRoutesDeps = Pick<Registry, 'authController' | 'limit'>;
 
@@ -51,6 +51,6 @@ export const authRoutes = ({ authController, limit }: AuthRoutesDeps) => {
         handlers: [credentialLimit(), authController.changePassword],
       }),
     ],
-    { use: [noStore] },
+    { use: [noStoreMiddleware] },
   );
 };

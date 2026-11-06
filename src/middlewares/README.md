@@ -34,13 +34,15 @@ errorHandler   →  normalize → log → respond
 Middleware that needs options is written as a factory — a function returning the handler — so it can be configured at mount time and tested without an app:
 
 ```js
-const requestIdMiddleware = ({ header = HTTP_HEADERS.X_REQUEST_ID, trustIncoming = true } = {}) =>
+const createRequestIdMiddleware = ({ header = HTTP_HEADERS.X_REQUEST_ID, trustIncoming = true } = {}) =>
     (req, res, next) => {
         // ...
     }
 ```
 
-Mounted with `app.use(requestIdMiddleware())` — note the call. Middleware with nothing to configure (`notFound`, `errorHandler`) is exported as a plain handler and mounted without parentheses.
+Mounted with `app.use(createRequestIdMiddleware())` — note the call. Middleware with nothing to configure (`notFoundMiddleware`, `errorHandlerMiddleware`, `noStoreMiddleware`) is exported as a plain handler and mounted without parentheses.
+
+The name says which one you have: a factory is `create<Name>Middleware`, a ready handler is `<name>Middleware`, where `<name>` is the file's (`requestId.middleware.ts` exports `createRequestIdMiddleware`).
 
 ## What's here
 
@@ -48,16 +50,17 @@ Mounted with `app.use(requestIdMiddleware())` — note the call. Middleware with
 |------|------|
 | `requestId.middleware.ts` | Reuses a valid inbound `X-Request-Id` or generates one; sets `req.id`, echoes the header, opens the async context |
 | `httpLogger.middleware.ts` | One access log line per request with method, path, status, duration, IP; warns on slow or aborted requests; skips configured paths |
-| `authenticate.middleware.ts` | `createAuthenticate({ accessTokens })`: verifies `Authorization: Bearer <jwt>`, validates the claims with `authUserSchema`, sets `req.user`. A `401` carries `WWW-Authenticate`. The auth module provides it; the `authenticated` and `roles` strategies run it |
-| `authorize.middleware.ts` | `authorize(roles)`: `403` unless `req.user.role` is listed, `401` if nobody was authenticated. The `roles` access strategy puts it after `authenticate` |
+| `authenticate.middleware.ts` | `createAuthenticateMiddleware({ accessTokens })`: verifies `Authorization: Bearer <jwt>`, validates the claims with `authUserSchema`, sets `req.user`. A `401` carries `WWW-Authenticate`. The auth module provides it; the `authenticated` and `roles` strategies run it |
+| `authorize.middleware.ts` | `createAuthorizeMiddleware(roles)`, registered as the container's `authorize`: `403` unless `req.user.role` is listed, `401` if nobody was authenticated. The `roles` access strategy puts it after `authenticate` |
 | `noStore.middleware.ts` | `Cache-Control: no-store`, for health probes and token responses |
 | `notFound.middleware.ts` | Converts an unmatched route into a `NotFoundError` |
-| `error.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
+| `errorHandler.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
 
 ## Writing one
 
 ```ts
-export const requireHeader = (name: string): RequestHandler => (req, _res, next) => {
+// middlewares/requireHeader.middleware.ts
+export const createRequireHeaderMiddleware = (name: string): RequestHandler => (req, _res, next) => {
     if (!req.get(name)) return next(new BadRequestError(`Missing ${name} header`))
     next()
 }

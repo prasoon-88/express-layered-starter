@@ -1,4 +1,4 @@
-import ENV_CONSTANTS from '#constants/env/index';
+import { ENV_CONSTANTS } from '#constants/env/index';
 
 // These are OpenTelemetry's own variables (https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
 // The SDK reads and validates them; the app's env schema does not repeat them. Only the

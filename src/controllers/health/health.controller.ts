@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
 import { apiResponse } from '#utils/apiResponse.util';
-import lifecycleState from '#lib/lifecycle/state';
+import { lifecycleState } from '#lib/lifecycle/state';
 import { runReadinessChecks, type ReadinessCheck } from '#lib/health/index';
-import ERROR_CODES from '#constants/error/errorCodes.constant';
+import { ERROR_CODES } from '#constants/error/errorCodes.constant';
 import { ServiceUnavailableError } from '#errors';
 
 type HealthControllerConfig = {

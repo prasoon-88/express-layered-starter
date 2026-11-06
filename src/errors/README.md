@@ -10,7 +10,7 @@
 
 ## What does NOT go here
 
-- ❌ Response formatting or `res.status(...)` — that's [`middlewares/error.middleware.ts`](../middlewares/error.middleware.ts)
+- ❌ Response formatting or `res.status(...)` — that's [`middlewares/errorHandler.middleware.ts`](../middlewares/errorHandler.middleware.ts)
 - ❌ Logging — the handler logs once, centrally
 - ❌ Business rules about *when* to fail — that's `services/`
 
@@ -71,7 +71,7 @@ On `main` they run in this order:
 
 | Converter | Recognizes | Becomes |
 |-----------|------------|---------|
-| [`zod.converter.ts`](converter/zod.converter.ts) | a `ZodError` from request validation in [`route()`](../lib/http/route.lib.ts) | `400 BAD_REQUEST`, `details: [{ path, message }]` |
+| [`zod.converter.ts`](converter/zod.converter.ts) | a `ZodError` from request validation in [`route()`](../lib/http/route.ts) | `400 BAD_REQUEST`, `details: [{ path, message }]` |
 | [`http.converter.ts`](converter/http.converter.ts) | body-parser errors (bad JSON, body too large, bad charset), and other `http-errors` with `expose: true` | `400` / `413` / `415`, or the error's own 4xx status |
 | [`jwt.converter.ts`](converter/jwt.converter.ts) | `TokenExpiredError`, `NotBeforeError`, `JsonWebTokenError` | `401` |
 

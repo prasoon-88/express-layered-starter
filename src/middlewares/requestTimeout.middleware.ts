@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import { getLogger } from '#lib/logger/index';
-import RequestTimeoutError from '#errors/requestTimeout.error';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { RequestTimeoutError } from '#errors/requestTimeout.error';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
 
-const logger = getLogger('request-timeout');
+const logger = getLogger('requestTimeout.middleware');
 
 type Deadline = {
   controller: AbortController;
@@ -66,7 +66,7 @@ const handleTimeout = (
   next(err);
 };
 
-export const requestTimeoutMiddleware =
+export const createRequestTimeoutMiddleware =
   (ms: number) => (req: Request, res: Response, next: NextFunction) => {
     const deadline = getOrCreateDeadline(req, res);
     clearTimeout(deadline.timer);

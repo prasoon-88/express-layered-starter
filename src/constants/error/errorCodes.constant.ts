@@ -1,4 +1,4 @@
-const ERROR_CODES = Object.freeze({
+export const ERROR_CODES = Object.freeze({
   // Generic
   BAD_REQUEST: 'BAD_REQUEST',
   UNAUTHORIZED: 'UNAUTHORIZED',
@@ -35,5 +35,3 @@ const ERROR_CODES = Object.freeze({
 
 // Union of every value above ('BAD_REQUEST' | 'UNAUTHORIZED' | ...). A typo becomes a compile error.
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
-
-export default ERROR_CODES;

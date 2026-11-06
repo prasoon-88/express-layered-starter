@@ -4,9 +4,9 @@ import type { NextFunction, Request, Response } from 'express';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
-const { createHealthController } = await import('./index.ts');
+const { createHealthController } = await import('./health.controller.ts');
 const { ServiceUnavailableError } = await import('#errors');
-const { default: lifecycleState } = await import('#lib/lifecycle/state');
+const { lifecycleState } = await import('#lib/lifecycle/state');
 
 class FakeResponse {
   headersSent = false;

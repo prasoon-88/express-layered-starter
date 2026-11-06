@@ -1,8 +1,8 @@
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import ERROR_CODES from '#constants/error/errorCodes.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { ERROR_CODES } from '#constants/error/errorCodes.constant';
 import type { AppErrorCode } from '#constants/error/appErrorCodes.constant';
 
-class AppError extends Error {
+export class AppError extends Error {
   readonly code: AppErrorCode;
   readonly statusCode: number;
   readonly details: unknown;
@@ -25,5 +25,3 @@ class AppError extends Error {
     Error.captureStackTrace(this, this.constructor);
   }
 }
-
-export default AppError;

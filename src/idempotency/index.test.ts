@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import pino from 'pino';
 import { parseEnv } from '#constants/env/schema';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
 import { ServiceUnavailableError } from '#errors';
 import { closeRedisClient, createRedisClient } from '#lib/redis/index';
 import { freePort, holdDeadPort, redisSkip as skip, startRedisServer } from '#testing/redisServer';

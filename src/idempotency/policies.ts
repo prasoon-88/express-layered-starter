@@ -1,7 +1,8 @@
 import type { Env } from '#constants/env/schema';
-import { IDEMPOTENCY_METHODS } from '#constants/idempotency.constants';
+import { IDEMPOTENCY_METHODS } from '#constants/idempotency.constant';
 import { UnknownPolicyError } from './errors.ts';
 import type { Policy } from './types.ts';
+import { SECONDS_PER_DAY } from '#constants/time.constant';
 
 export const POLICY_NAMES = ['default', 'payments'] as const;
 export type PolicyName = (typeof POLICY_NAMES)[number];
@@ -18,7 +19,7 @@ export const buildDefaultPolicies = (
     methods: IDEMPOTENCY_METHODS,
   },
   payments: {
-    ttlS: 7 * 86_400,
+    ttlS: 7 * SECONDS_PER_DAY,
     lockTtlS: e.IDEMPOTENCY_LOCK_TTL_S,
     required: true,
     methods: ['POST'],

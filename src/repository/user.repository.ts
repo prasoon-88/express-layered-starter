@@ -1,23 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
 import type { UserRole } from '#constants/user.constant';
 import { ConflictError } from '#errors';
 
-export interface NewUser {
+export type NewUser = {
   fullName: string;
   email: string;
   passwordHash: string;
   role: UserRole;
-}
+};
 
-export interface StoredUser extends NewUser {
+export type StoredUser = NewUser & {
   id: string;
   /**
    * Starts at 0. Raising it ends every session: refresh refuses a token issued under an older
    * value. On a database, an integer column updated in the same statement as the change.
    */
   sessionVersion: number;
-}
+};
 
 // In-memory until a database branch replaces this file. Async because every real DB call is.
 // Each call owns its own store, so two apps (or two tests) never share users.

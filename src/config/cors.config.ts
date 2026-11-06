@@ -1,5 +1,5 @@
 import type { CorsOptions } from 'cors';
-import ENV_CONSTANTS from '#constants/env/index';
+import { ENV_CONSTANTS } from '#constants/env/index';
 
 // Built once at startup, not per request.
 const rules = ENV_CONSTANTS.CORS_ORIGINS;

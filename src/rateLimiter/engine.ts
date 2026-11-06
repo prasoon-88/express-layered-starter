@@ -9,13 +9,14 @@ import {
 import type { Redis } from '#lib/redis/index';
 import type { PolicyName, PolicyRegistry } from './policies.ts';
 import type { Decision, Policy } from './types.ts';
-import type { StoreErrorMode } from '#constants/rateLimit.constants';
-import { concatenateStrings } from '#utils/concateStrings';
+import type { RateLimitStoreErrorMode } from '#constants/rateLimit.constant';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 export type RateLimiterEngineDeps = {
   policies: PolicyRegistry;
   prefix: string;
-  onStoreError: StoreErrorMode;
+  onStoreError: RateLimitStoreErrorMode;
   log: Logger;
   redis?: Redis;
   limiterFactory?: (name: string, policy: Policy) => RateLimiterAbstract;
@@ -73,7 +74,7 @@ export const createRateLimitEngine = (deps: RateLimiterEngineDeps) => {
       limit: p.points,
       remaining: allowed ? (res?.remainingPoints ?? p.points) : 0,
       windowS: p.durationS,
-      resetMs: res?.msBeforeNext ?? p.durationS * 1000,
+      resetMs: res?.msBeforeNext ?? p.durationS * MS_PER_SECOND,
       refund:
         allowed && res
           ? async () => {

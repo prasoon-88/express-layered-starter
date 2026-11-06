@@ -1,6 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { concatenateStrings } from './concateStrings.ts';
+import { concatenateStrings } from './concatenateStrings.util.ts';
 
 const scryptAsync = promisify(scrypt) as (
   password: string,

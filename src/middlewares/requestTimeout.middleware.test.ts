@@ -5,8 +5,8 @@ import type { NextFunction, Request, Response } from 'express';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
-const { requestTimeoutMiddleware } = await import('./requestTimeout.middleware.ts');
-const { default: RequestTimeoutError } = await import('#errors/requestTimeout.error');
+const { createRequestTimeoutMiddleware } = await import('./requestTimeout.middleware.ts');
+const { RequestTimeoutError } = await import('#errors/requestTimeout.error');
 
 const nodeSignal = new AbortController().signal;
 
@@ -47,14 +47,14 @@ const callsOf = () => {
 const run = (ms: number, req: FakeRequest, res: FakeResponse, next: NextFunction, tickMs = 0) => {
   mock.timers.enable({ apis: ['setTimeout'] });
   try {
-    requestTimeoutMiddleware(ms)(req as unknown as Request, res as unknown as Response, next);
+    createRequestTimeoutMiddleware(ms)(req as unknown as Request, res as unknown as Response, next);
     if (tickMs > 0) mock.timers.tick(tickMs);
   } finally {
     mock.timers.reset();
   }
 };
 
-describe('requestTimeoutMiddleware', () => {
+describe('createRequestTimeoutMiddleware', () => {
   it('puts the budget on req.deadline and leaves Node req.signal alone', () => {
     const req = new FakeRequest();
     const { calls, next } = callsOf();

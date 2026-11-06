@@ -1,5 +1,5 @@
-import homeController from '#controllers/web/home.controller';
-import signupController from '#controllers/web/signup.controller';
+import { homeController } from '#controllers/web/home.controller';
+import { signupController } from '#controllers/web/signup.controller';
 import { defineModule } from '#http/routes';
 import { webRoutes } from '#routes/web/index';
 

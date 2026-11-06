@@ -6,7 +6,7 @@ import type { Logger } from 'pino';
 
 process.env.NODE_ENV ??= 'test';
 
-const { default: httpLoggerMiddleware } = await import('./httpLogger.middleware.ts');
+const { createHttpLoggerMiddleware } = await import('./httpLogger.middleware.ts');
 
 type Entry = { level: string; data: Record<string, unknown>; message: string };
 
@@ -44,7 +44,7 @@ const run = (
   const req = { originalUrl: url, method: 'GET', id: 'req-1', ip: '203.0.113.7', get: () => 'ua' };
 
   let nexted = false;
-  httpLoggerMiddleware({ logger, ignorePaths: [], slowRequestMs: 1_000, ...options })(
+  createHttpLoggerMiddleware({ logger, ignorePaths: [], slowRequestMs: 1_000, ...options })(
     req as unknown as Request,
     res as unknown as Response,
     () => {
@@ -55,7 +55,7 @@ const run = (
   return { res, entries, nexted: () => nexted };
 };
 
-describe('httpLoggerMiddleware', () => {
+describe('createHttpLoggerMiddleware', () => {
   it('logs one line per request, with the request id and no query string', () => {
     const { res, entries } = run('/api/things?token=secret&page=2');
 

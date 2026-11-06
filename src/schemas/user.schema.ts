@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import REGEX from '#constants/regex.constant';
+import { REGEX } from '#constants/regex.constant';
 import { USER_ROLES } from '#constants/user.constant';
 
 // The authenticated user that every non-public route sees as `req.user`.

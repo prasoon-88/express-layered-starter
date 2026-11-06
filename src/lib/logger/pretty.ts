@@ -1,5 +1,5 @@
 import type { MessageFormatFunc, PrettyOptions } from 'pino-pretty';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 
 type Colors = Parameters<MessageFormatFunc>[3]['colors'];
 

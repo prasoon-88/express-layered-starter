@@ -2,6 +2,7 @@ import type { Redis } from '#lib/redis/index';
 import type { Logger } from 'pino';
 import type { PolicyName, PolicyRegistry } from './policies.ts';
 import { policySchema, type Policy } from './types.ts';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 type StartPolicySyncConfig = {
   redis: Pick<Redis, 'hGetAll'>;
@@ -46,7 +47,7 @@ export const startPolicySync: StartPolicySync = (o) => {
   };
 
   void sync();
-  const timer = setInterval(() => void sync(), o.intervalS * 1000);
+  const timer = setInterval(() => void sync(), o.intervalS * MS_PER_SECOND);
   timer.unref();
   return () => clearInterval(timer);
 };

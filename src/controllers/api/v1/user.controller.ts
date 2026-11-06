@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { route } from '#lib/http/route.lib';
-import REGEX from '#constants/regex.constant';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
+import { route } from '#lib/http/route';
+import { REGEX } from '#constants/regex.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
 import { USER_ROLES } from '#constants/user.constant';
 import { newPasswordSchema } from '#schemas/user.schema';
 import type { UserService } from '#services/user.service';

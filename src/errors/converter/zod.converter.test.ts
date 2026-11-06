@@ -2,8 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import { BadRequestError } from '#errors';
-import zodConverter from './zod.converter.ts';
-import jwtConverter from './jwt.converter.ts';
+import { zodConverter } from './zod.converter.ts';
+import { jwtConverter } from './jwt.converter.ts';
 import { convertError } from './index.ts';
 
 const failure = (schema: z.ZodType, input: unknown) => {

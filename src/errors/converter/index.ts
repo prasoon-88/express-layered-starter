@@ -1,6 +1,6 @@
-import httpConverter from './http.converter.ts';
-import jwtConverter from './jwt.converter.ts';
-import zodConverter from './zod.converter.ts';
+import { httpConverter } from './http.converter.ts';
+import { jwtConverter } from './jwt.converter.ts';
+import { zodConverter } from './zod.converter.ts';
 
 const converters = [zodConverter, httpConverter, jwtConverter];
 

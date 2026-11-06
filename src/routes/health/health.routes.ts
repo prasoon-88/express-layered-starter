@@ -1,6 +1,6 @@
 import type { Registry } from '#http/registry';
 import { defineGroup, defineRoute } from '#http/routes';
-import { noStore } from '#middlewares/noStore.middleware';
+import { noStoreMiddleware } from '#middlewares/noStore.middleware';
 
 const probe = { strategy: 'public', reason: 'Platform probes carry no credentials' } as const;
 
@@ -22,5 +22,5 @@ export const healthRoutes = ({ healthController }: Pick<Registry, 'healthControl
         handlers: [healthController.live],
       }),
     ],
-    { use: [noStore] },
+    { use: [noStoreMiddleware] },
   );

@@ -1,6 +1,6 @@
 import { ServiceUnavailableError } from '#errors';
 import type { Redis } from '#lib/redis/index';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import type {
   NewRefreshToken,
   RefreshTokenRepository,

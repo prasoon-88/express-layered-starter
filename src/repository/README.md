@@ -20,13 +20,13 @@ That isolation is why `main` ships without a database at all: this folder and [`
 ## Example
 ```ts
 // repository/post.repository.ts
-import Post from '#models/post.model'
+import { PostModel } from '#models/post.model'
 
 export const createPostRepository = () => ({
-  create:   (data: NewPost) => Post.create(data),
-  findById: (id: string)    => Post.findById(id),
-  findAll:  ()              => Post.find(),
-  remove:   (id: string)    => Post.findByIdAndDelete(id),
+  create:   (data: NewPost) => PostModel.create(data),
+  findById: (id: string)    => PostModel.findById(id),
+  findAll:  ()              => PostModel.find(),
+  remove:   (id: string)    => PostModel.findByIdAndDelete(id),
 })
 
 export type PostRepository = ReturnType<typeof createPostRepository>
@@ -39,7 +39,7 @@ A repository is a factory, like the layers above it. Anything configured at star
 | File | Holds | A database branch keeps |
 |------|-------|-------------------------|
 | [`user.repository.ts`](user.repository.ts) | users: `create`, `findByEmail`, `findById`, `updatePassword`, `endSessions` | a unique index on `email`; `create` rejects a duplicate with `EMAIL_TAKEN`; a `session_version` integer column, raised in the same statement as the change (`SET session_version = session_version + 1`); `updatePassword` as a compare-and-set on the old hash (`WHERE id = ? AND password_hash = ?`), returning nothing when it changed |
-| [`refreshToken.repository.ts`](refreshToken.repository.ts) | the `RefreshTokenRepository` interface and the in-memory store (`AUTH_STORE=memory`): `create`, `findById`, `markUsed`, `revokeFamily` | `markUsed` as one conditional `UPDATE … WHERE used_at IS NULL` checked by row count; revocation on a family row, so a token written after it is revoked too; a TTL index on `expiresAt` |
+| [`refreshToken.repository.ts`](refreshToken.repository.ts) | the `RefreshTokenRepository` type and the in-memory store (`AUTH_STORE=memory`): `create`, `findById`, `markUsed`, `revokeFamily` | `markUsed` as one conditional `UPDATE … WHERE used_at IS NULL` checked by row count; revocation on a family row, so a token written after it is revoked too; a TTL index on `expiresAt` |
 | [`refreshToken.redis.repository.ts`](refreshToken.redis.repository.ts) | the same interface on Redis (`AUTH_STORE=redis`), shared by replicas | — |
 
 Every store is atomic where it matters: the check and the write happen in one step (a synchronous block in memory, a Lua script in Redis), so two concurrent requests cannot both pass the check. A database version must keep that property with a constraint or a conditional write, not a read followed by a write.

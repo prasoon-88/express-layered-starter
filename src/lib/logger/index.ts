@@ -1,7 +1,7 @@
 import os from 'node:os';
 import pino, { type DestinationStream, type LoggerOptions } from 'pino';
 import { loggerConfig } from '#config/logger.config';
-import requestContext from '#contexts/requestContext';
+import { requestContext } from '#contexts/requestContext';
 
 const buildOptions = ({ pretty }: { pretty: boolean }): LoggerOptions => ({
   level: loggerConfig.level,
@@ -39,9 +39,7 @@ const createDefaultLogger = async () => {
   return createLogger();
 };
 
-const logger = await createDefaultLogger();
+export const logger = await createDefaultLogger();
 
 // One logger per file: every line is tagged with where it came from.
 export const getLogger = (module: string) => logger.child({ module });
-
-export default logger;

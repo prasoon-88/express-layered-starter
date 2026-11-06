@@ -116,7 +116,7 @@ Note what the controller does *not* do: no status codes picked by hand, no error
 | Ask yourself... | Put it in |
 |-----------------|-----------|
 | Does it touch `req` / `res`? | `controllers/` |
-| Does it check the shape of request input (types, formats, required fields)? | `controllers/`, as [`route()`](lib/http/route.lib.ts) schemas |
+| Does it check the shape of request input (types, formats, required fields)? | `controllers/`, as [`route()`](lib/http/route.ts) schemas |
 | Is it a rule, decision, or sequence of steps? | `services/` |
 | Does it run a database query? | `repository/` |
 | Does it define a data shape/schema? | `models/` |
@@ -190,5 +190,22 @@ Never `../../services/user.service.ts`. The alias keeps a file's imports stable 
 **`errors/`** gives you typed failures. Throw `NotFoundError` in a service and the HTTP status, error code, and response shape are already decided — the service never learns what a 404 is.
 
 **`contexts/`** holds request-scoped state in `AsyncLocalStorage`. It's how the logger tags every line with the current request ID, and how `apiResponse` includes it, without any layer passing `req` downward. Read from it; don't use it to smuggle arguments between layers.
+
+## Naming and code conventions
+
+The ones marked **lint** or **test** fail `pnpm check` when broken; the rest are kept by review.
+
+| Rule | Example | Enforced by |
+|------|---------|-------------|
+| A file in a layer folder ends in its layer: `.service.ts`, `.controller.ts`, `.repository.ts`, `.routes.ts`, `.middleware.ts`, `.module.ts`, `.constant.ts`, `.config.ts`, `.error.ts`, `.converter.ts`, `.schema.ts`, `.util.ts`, `.model.ts`. `index.ts` only for a folder's entry point or a group of routes or modules | `health/health.controller.ts`, `routes/api/v1/index.ts` | **test** ([`conventions.test.ts`](conventions.test.ts)) |
+| A feature folder (`lib/<system>/`, `http/`, `rateLimiter/`, `idempotency/`, `contexts/`) names the role, so its files have no suffix | `lib/http/route.ts`, `rateLimiter/engine.ts` | review |
+| Named exports only. The export is named after the file | `http.converter.ts` → `httpConverter` | **lint** |
+| A function that builds something is `create<Thing>`; a middleware factory is `create<Name>Middleware`, a ready handler `<name>Middleware` | `createAuthService`, `createCorsMiddleware`, `notFoundMiddleware` | review |
+| An error class ends in `Error` and lives in `<name>.error.ts` | `ServiceUnavailableError` in `serviceUnavailable.error.ts` | review |
+| A shape is a `type`. An `interface` only where declaration merging needs one: `declare module`, `declare global`, and the two it merges into in [`http/registry.ts`](http/registry.ts) | `type TokenPair = {...}` | **lint** |
+| Constants are `UPPER_SNAKE_CASE`, frozen objects or `as const` lists, prefixed by their feature; durations end in `_S` or `_MS` and convert through [`constants/time.constant.ts`](constants/time.constant.ts) | `DEFAULT_RATE_LIMIT_STORE_ERROR_MODE`, `ttlS * MS_PER_SECOND` | review ([constants](constants/README.md)) |
+| A logger is named after its file without `.ts`, or after the folder for an `index.ts` | `getLogger('auth.service')`, `getLogger('health')` | review |
+| Tests share their HTTP helpers through [`#testing/http`](testing/http.ts): `listen`, `postJson`, `waitFor` | `const { server, baseUrl } = await listen(app)` | review |
+| Join strings with `concatenateStrings` where every part is non-empty; it drops empty ones | `concatenateStrings([prefix, 'rt', id], ':')` | review |
 
 > Each folder has its own `README.md` with detailed rules and examples. Start there when adding code to a layer you're unsure about.

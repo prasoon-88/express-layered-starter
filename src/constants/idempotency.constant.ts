@@ -1,5 +1,6 @@
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
+import { SECONDS_PER_DAY } from '#constants/time.constant';
 
 export const IDEMPOTENCY_STORES = ['memory', 'redis'] as const;
 export type IdempotencyStoreName = (typeof IDEMPOTENCY_STORES)[number];
@@ -9,7 +10,7 @@ export type IdempotencyStoreErrorMode = (typeof IDEMPOTENCY_STORE_ERROR_MODES)[n
 
 export const DEFAULT_IDEMPOTENCY_STORE: IdempotencyStoreName = 'memory';
 export const DEFAULT_IDEMPOTENCY_STORE_ERROR_MODE: IdempotencyStoreErrorMode = 'deny';
-export const DEFAULT_IDEMPOTENCY_TTL_S = 86_400;
+export const DEFAULT_IDEMPOTENCY_TTL_S = SECONDS_PER_DAY;
 export const DEFAULT_IDEMPOTENCY_LOCK_TTL_S = 60;
 export const DEFAULT_IDEMPOTENCY_MAX_BODY_BYTES = 256 * 1024;
 

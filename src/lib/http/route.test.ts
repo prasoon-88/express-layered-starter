@@ -5,9 +5,9 @@ import { z } from 'zod';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
-const { route, getRouteContract } = await import('./route.lib.ts');
+const { route, getRouteContract } = await import('./route.ts');
 const { apiResponse } = await import('#utils/apiResponse.util');
-const { default: requestContext } = await import('#contexts/requestContext');
+const { requestContext } = await import('#contexts/requestContext');
 
 class FakeResponse {
   headersSent = false;

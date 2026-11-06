@@ -2,9 +2,9 @@ import type { RequestHandler } from 'express';
 import type { AccessTokens } from '#lib/auth/accessToken';
 import { authUserSchema } from '#schemas/user.schema';
 import { UnauthorizedError } from '#errors';
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
-import REGEX from '#constants/regex.constant';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
+import { REGEX } from '#constants/regex.constant';
 
 type AuthenticateDeps = {
   accessTokens: Pick<AccessTokens, 'verify'>;
@@ -15,7 +15,9 @@ const CHALLENGE = 'Bearer';
 const INVALID_TOKEN_CHALLENGE = 'Bearer error="invalid_token"';
 
 /** Verifies the Bearer access token and sets `req.user`. The `authenticated` and `roles` strategies run it. */
-export const createAuthenticate = ({ accessTokens }: AuthenticateDeps): RequestHandler => {
+export const createAuthenticateMiddleware = ({
+  accessTokens,
+}: AuthenticateDeps): RequestHandler => {
   return (req, res, next) => {
     const header = req.headers.authorization;
     if (header === undefined) {

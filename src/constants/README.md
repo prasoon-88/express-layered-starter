@@ -33,20 +33,30 @@ USER_ROLES      → fixed set      → constants
 `constants/` depends on **nothing**. `config/` may import constants — never the reverse.
 
 ## Example
-```js
-// constants/http.ts
-export const HTTP_STATUS = {
+```ts
+// constants/http/httpStatus.constant.ts: a lookup table is a frozen object
+export const HTTP_STATUS = Object.freeze({
     OK: 200,
     CREATED: 201,
-    BAD_REQUEST: 400,
-    UNAUTHORIZED: 401,
     NOT_FOUND: 404,
-    SERVER_ERROR: 500,
-}
+})
 
-// constants/roles.ts
-export const USER_ROLES = { ADMIN: 'admin', USER: 'user' }
+// constants/user.constant.ts: a fixed set is an `as const` list, with its type derived from it
+export const USER_ROLES = ['NORMAL', 'ADMIN'] as const
+export type UserRole = (typeof USER_ROLES)[number]
+
+// constants/rateLimit.constant.ts: a feature's values share its prefix, durations name their unit
+export const DEFAULT_RATE_LIMIT_WINDOW_S = 60
+export const DEFAULT_RATE_LIMIT_STORE: RateLimitStoreName = 'memory'
 ```
 
+The conventions, as in the example:
+
+- One file per topic, named `<topic>.constant.ts`, with named exports only.
+- A lookup table is `Object.freeze({...})`. A fixed set is `[...] as const`, and its type is derived from it, never written out a second time.
+- A feature's values start with its name (`RATE_LIMIT_`, `IDEMPOTENCY_`), and a default is `DEFAULT_<NAME>`, matching the env variable it is the default of.
+- A duration ends in its unit, `_S` or `_MS`. Convert with [`time.constant.ts`](time.constant.ts) (`MS_PER_SECOND`, `SECONDS_PER_DAY`), and round at the call site.
+- A type annotation only where inference would be wrong, such as a default narrowed to its union.
+
 ## Rule of thumb
-> Constants are facts that are true by definition. Name them in `UPPERCASE`, keep them pure (no imports, no env, no logic).
+> Constants are facts that are true by definition. Name them in `UPPERCASE`, keep them pure: they import only other constants, never env (outside `env/`) and never logic.

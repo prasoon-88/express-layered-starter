@@ -1,4 +1,4 @@
-const HTTP_STATUS = Object.freeze({
+export const HTTP_STATUS = Object.freeze({
   // 1xx Informational
   CONTINUE: 100,
   SWITCHING_PROTOCOLS: 101,
@@ -71,5 +71,3 @@ const HTTP_STATUS = Object.freeze({
   NOT_EXTENDED: 510,
   NETWORK_AUTHENTICATION_REQUIRED: 511,
 });
-
-export default HTTP_STATUS;

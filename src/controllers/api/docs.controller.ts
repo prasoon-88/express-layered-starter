@@ -1,9 +1,5 @@
 import type { RequestHandler } from 'express';
-import {
-  buildOpenApiDocument,
-  type OpenApiDocument,
-  type OpenApiRoute,
-} from '#lib/http/openapi.lib';
+import { buildOpenApiDocument, type OpenApiDocument, type OpenApiRoute } from '#lib/http/openapi';
 
 type DocsControllerDeps = {
   routeTable: { all: () => readonly OpenApiRoute[] };

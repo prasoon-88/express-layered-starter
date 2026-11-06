@@ -1,4 +1,4 @@
-const HTTP_HEADERS = Object.freeze({
+export const HTTP_HEADERS = Object.freeze({
   // General
   CACHE_CONTROL: 'Cache-Control',
   CONNECTION: 'Connection',
@@ -86,5 +86,3 @@ export const CORS_DEFAULT_EXPOSED_HEADERS = [
   HTTP_HEADERS.X_REQUEST_ID,
   HTTP_HEADERS.IDEMPOTENT_REPLAYED,
 ];
-
-export default HTTP_HEADERS;

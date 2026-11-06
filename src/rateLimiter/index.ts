@@ -3,7 +3,7 @@ import { closeRedisClient, createRedisClient, type Redis } from '#lib/redis/inde
 import type { Logger } from 'pino';
 import { buildDefaultPolicies, createPolicyRegistry } from './policies.ts';
 import { createRateLimitEngine } from './engine.ts';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import { startPolicySync } from './policySync.ts';
 import { createLimit } from './middleware.ts';
 import { createStoreReadinessCheck } from './readiness.ts';

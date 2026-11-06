@@ -2,9 +2,10 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { createServer, type Server } from 'node:http';
+import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { listen, postJson, waitFor } from '#testing/http';
 import { freePort, redisSkip, startRedisServer } from '#testing/redisServer';
 
 // The real server in a child process, started the way pnpm start starts it, exporting OTLP/JSON
@@ -36,19 +37,17 @@ const attr = (span: Span, key: string) => {
 // An OTLP/HTTP endpoint: keeps every body it is sent, per signal path.
 const startReceiver = async () => {
   const bodies: Record<string, unknown[]> = {};
-  const server: Server = createServer((req, res) => {
-    let raw = '';
-    req.setEncoding('utf8');
-    req.on('data', (chunk: string) => (raw += chunk));
-    req.on('end', () => {
-      (bodies[req.url ?? ''] ??= []).push(JSON.parse(raw));
-      res.writeHead(200, { 'Content-Type': 'application/json' }).end('{}');
-    });
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
+  const { server, baseUrl } = await listen(
+    createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => (raw += chunk));
+      req.on('end', () => {
+        (bodies[req.url ?? ''] ??= []).push(JSON.parse(raw));
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end('{}');
+      });
+    }),
+  );
 
   const spans = () =>
     (bodies['/v1/traces'] ?? []).flatMap((body) =>
@@ -56,7 +55,7 @@ const startReceiver = async () => {
         (rs) => rs.scopeSpans.flatMap((ss) => ss.spans),
       ),
     );
-  return { url: `http://127.0.0.1:${address.port}`, bodies, spans, server };
+  return { url: baseUrl, bodies, spans, server };
 };
 
 type Started = { child: ChildProcess; baseUrl: string; stdout: () => string; stderr: () => string };
@@ -121,23 +120,6 @@ const startApp = async (
   return { child, baseUrl, stdout: () => stdout, stderr: () => stderr };
 };
 
-const waitFor = async <T>(read: () => T | undefined, what: string, timeoutMs = 10_000) => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = read();
-    if (value !== undefined) return value;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await sleep(100);
-  }
-};
-
-const post = (url: string, body: unknown, headers: Record<string, string> = {}) =>
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-
 after(() => {
   for (const child of children) child.kill();
 });
@@ -179,14 +161,14 @@ describe('OpenTelemetry, end to end', { skip: redisSkip }, () => {
 
       const api = `${app.baseUrl}/api/v1`;
       const user = { fullName: 'Ada', email: 'otel@example.com', password: PASSWORD };
-      assert.equal((await post(`${api}/user/register`, user)).status, 201);
+      assert.equal((await postJson(`${api}/user/register`, user)).status, 201);
 
-      const login = await post(`${api}/auth/login`, { email: user.email, password: PASSWORD });
+      const login = await postJson(`${api}/auth/login`, { email: user.email, password: PASSWORD });
       const { refreshToken } = ((await login.json()) as { data: { refreshToken: string } }).data;
-      assert.equal((await post(`${api}/auth/refresh`, { refreshToken })).status, 200);
+      assert.equal((await postJson(`${api}/auth/refresh`, { refreshToken })).status, 200);
       secrets = [PASSWORD, ...refreshToken.split('.')];
 
-      const traced = await post(
+      const traced = await postJson(
         `${api}/auth/login`,
         { email: user.email, password: 'wrong-password-0' },
         { traceparent: `00-${TRACE_ID}-${PARENT_SPAN_ID}-01`, 'X-Request-Id': 'req-otel-1' },
@@ -287,7 +269,10 @@ describe('OpenTelemetry, end to end', { skip: redisSkip }, () => {
   // With no destination the preload starts nothing, so pino is not instrumented either.
   it('starts nothing without a destination: no trace ids in the logs, no warning', async () => {
     const app = await startApp({});
-    await post(`${app.baseUrl}/api/v1/auth/login`, { email: 'nobody@example.com', password: 'x' });
+    await postJson(`${app.baseUrl}/api/v1/auth/login`, {
+      email: 'nobody@example.com',
+      password: 'x',
+    });
     await waitFor(
       () => (app.stdout().includes('"Request Failed"') ? true : undefined),
       'the failed login log line',

@@ -1,16 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestHandler } from 'express';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
-import REGEX from '#constants/regex.constant';
-import requestContext from '#contexts/requestContext';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
+import { REGEX } from '#constants/regex.constant';
+import { requestContext } from '#contexts/requestContext';
 
-interface RequestIdOptions {
+type RequestIdOptions = {
   header?: string;
   trustIncoming?: boolean;
   generator?: () => string;
-}
+};
 
-const requestIdMiddleware =
+export const createRequestIdMiddleware =
   ({
     header = HTTP_HEADERS.X_REQUEST_ID,
     trustIncoming = true,
@@ -27,5 +27,3 @@ const requestIdMiddleware =
 
     requestContext.run({ [requestContext.STORE_KEYS.REQUEST_ID]: id }, next);
   };
-
-export default requestIdMiddleware;

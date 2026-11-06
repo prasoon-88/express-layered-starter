@@ -1,7 +1,7 @@
-import ERROR_CODES, { type ErrorCode } from './error/errorCodes.constant.ts';
-import HTTP_STATUS from './http/httpStatus.constant.ts';
+import { ERROR_CODES, type ErrorCode } from '#constants/error/errorCodes.constant';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
 
-const STATUS_TO_CODE: Readonly<Record<number, ErrorCode>> = {
+export const STATUS_TO_CODE: Readonly<Record<number, ErrorCode>> = Object.freeze({
   [HTTP_STATUS.BAD_REQUEST]: ERROR_CODES.BAD_REQUEST,
   [HTTP_STATUS.UNAUTHORIZED]: ERROR_CODES.UNAUTHORIZED,
   [HTTP_STATUS.FORBIDDEN]: ERROR_CODES.FORBIDDEN,
@@ -13,6 +13,4 @@ const STATUS_TO_CODE: Readonly<Record<number, ErrorCode>> = {
   [HTTP_STATUS.UNPROCESSABLE_ENTITY]: ERROR_CODES.VALIDATION_FAILED,
   [HTTP_STATUS.TOO_MANY_REQUESTS]: ERROR_CODES.TOO_MANY_REQUESTS,
   [HTTP_STATUS.INTERNAL_SERVER_ERROR]: ERROR_CODES.INTERNAL_ERROR,
-};
-
-export default STATUS_TO_CODE;
+});

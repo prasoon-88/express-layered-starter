@@ -3,8 +3,8 @@ import type { UserRole } from '#constants/user.constant';
 import { ForbiddenError, UnauthorizedError } from '#errors';
 
 /** Lets through a caller whose role is listed. Mount it after the middleware that sets `req.user`. */
-export const authorize = (roles: readonly UserRole[]): RequestHandler => {
-  if (roles.length === 0) throw new Error('authorize() needs at least one role');
+export const createAuthorizeMiddleware = (roles: readonly UserRole[]): RequestHandler => {
+  if (roles.length === 0) throw new Error('createAuthorizeMiddleware() needs at least one role');
   const allowed = new Set(roles);
 
   return (req, _res, next) => {

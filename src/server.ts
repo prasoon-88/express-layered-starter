@@ -2,7 +2,7 @@ import { createApp } from './app.ts';
 import { initRateLimit } from '#rateLimiter';
 import { initIdempotency } from '#idempotency';
 import { getLogger } from '#lib/logger/index';
-import ENV_CONSTANTS from '#constants/env/index';
+import { ENV_CONSTANTS } from '#constants/env/index';
 import { createHttpServer } from '#lib/http/createHttpServer';
 import { registerProcessHandler } from '#lib/lifecycle/index';
 import { closeRedisClient, createRedisClient } from '#lib/redis/index';

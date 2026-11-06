@@ -17,6 +17,7 @@ export type RouteTable = {
  *
  * So no file has to list every dependency in the app.
  */
+// eslint-disable-next-line no-restricted-syntax -- augmented by declaration merging, which needs an interface
 export interface Registry {
   /** Verifies the caller and sets `req.user`. The `authenticated` and `roles` strategies need it. */
   authenticate: RequestHandler;
@@ -32,6 +33,7 @@ type NoOptions = Record<never, never>;
  * Every way a route can be accessed, by strategy name, with the options a route must give.
  * Add a strategy by augmenting this interface and passing its implementation to `mount`.
  */
+// eslint-disable-next-line no-restricted-syntax -- augmented by declaration merging, which needs an interface
 export interface AccessStrategies {
   /** Anyone, no credentials. The reason is required so that every public route is a decision. */
   public: { reason: string };

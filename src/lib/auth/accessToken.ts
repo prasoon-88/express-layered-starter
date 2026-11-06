@@ -1,14 +1,15 @@
 import jwt from 'jsonwebtoken';
 import { JWT_ALGORITHM, JWT_SECRET_MIN_LENGTH } from '#constants/auth.constant';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 // Instances behind a load balancer never share a perfectly synced clock.
 const CLOCK_TOLERANCE_S = 5;
 
-export interface AccessClaims {
+export type AccessClaims = {
   sub: string;
   email: string;
   role: string;
-}
+};
 
 type AccessTokenOptions = {
   secret: string;
@@ -31,7 +32,7 @@ export const createAccessTokens = ({
   if (!Number.isInteger(ttlS) || ttlS <= 0)
     throw new RangeError('The access token ttl must be a positive whole number of seconds');
 
-  const seconds = () => Math.floor(now() / 1000);
+  const seconds = () => Math.floor(now() / MS_PER_SECOND);
 
   const sign = ({ sub, email, role }: AccessClaims) => ({
     token: jwt.sign({ email, role, iat: seconds() }, secret, {

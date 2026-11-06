@@ -74,7 +74,7 @@ That breaks the "`constants/` depends on nothing" rule, and circular ESM imports
 - **Derive types, never hand-write them.** `z.infer` keeps the type and the runtime check from drifting apart.
 - **Clean first, then validate.** `z.email().trim()` rejects `"  a@b.com "` because the email check runs before the trim. Write `z.string().trim().toLowerCase().pipe(z.email())`.
 - **Request bodies use `z.strictObject`.** An unexpected `"admin": true` should be a `400`, not silently dropped.
-- **Response schemas use `z.object`.** In [`route()`](../lib/http/route.lib.ts) the response schema is an allowlist: fields it doesn't name (`passwordHash`) are stripped before the response leaves.
+- **Response schemas use `z.object`.** In [`route()`](../lib/http/route.ts) the response schema is an allowlist: fields it doesn't name (`passwordHash`) are stripped before the response leaves.
 - **Limits come from `constants/`.** A pagination schema reads its maximums from a constant, not a literal, so the schema and [`paginator.util.ts`](../utils/paginator.util.ts) cannot disagree.
 
 ## Example
@@ -82,7 +82,7 @@ That breaks the "`constants/` depends on nothing" rule, and circular ESM imports
 ```ts
 // schemas/common.schema.ts
 import { z } from 'zod'
-import REGEX from '#constants/regex.constant'
+import { REGEX } from '#constants/regex.constant'
 
 export const idSchema = z.string().regex(REGEX.SAFE_ID, 'Invalid id')
 
@@ -108,7 +108,7 @@ export type PublicUser = z.infer<typeof publicUserSchema>
 ```ts
 // controllers/api/v1/user.controller.ts
 import { z } from 'zod'
-import { route } from '#lib/http/route.lib'
+import { route } from '#lib/http/route'
 import { emailSchema } from '#schemas/common.schema'
 import { publicUserSchema } from '#schemas/user.schema'
 
@@ -129,7 +129,7 @@ export const createUser = route(
 
 A service may not import from `controllers/`, so it cannot reuse an endpoint schema's type. Two options, in order of preference:
 
-1. **The service declares its own input type** (`interface CreateUserInput { email: string; name: string }`). TypeScript checks that the controller's parsed body fits when it calls the service. Use this for endpoint-only shapes.
+1. **The service declares its own input type** (`type CreateUserInput = { email: string; name: string }`). TypeScript checks that the controller's parsed body fits when it calls the service. Use this for endpoint-only shapes.
 2. **The type comes from here** (`import type { PublicUser } from '#schemas/user.schema'`). Use this for shapes that are already shared.
 
 ## Dependency rules

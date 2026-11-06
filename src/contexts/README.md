@@ -46,7 +46,7 @@ requestContext.run({ requestId: id }, next)
 Everything `next()` triggers — synchronous or `await`ed, however deep — can read it:
 
 ```js
-import requestContext from '#contexts/requestContext'
+import { requestContext } from '#contexts/requestContext'
 
 requestContext.getRequestId()   // '3f2b…'
 ```

@@ -1,34 +1,35 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
 import { TOKEN_TYPE } from '#constants/auth.constant';
-import REGEX from '#constants/regex.constant';
+import { REGEX } from '#constants/regex.constant';
 import { ForbiddenError, UnauthorizedError } from '#errors';
 import type { AccessTokens } from '#lib/auth/accessToken';
 import { getLogger } from '#lib/logger/index';
 import type { RefreshTokenRepository } from '#repository/refreshToken.repository';
 import type { StoredUser, UserRepository } from '#repository/user.repository';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import { hashPassword, verifyPassword } from '#utils/password.util';
+import { MS_PER_SECOND } from '#constants/time.constant';
 
 const logger = getLogger('auth.service');
 
-export interface LoginInput {
+export type LoginInput = {
   email: string;
   password: string;
-}
+};
 
-export interface ChangePasswordInput {
+export type ChangePasswordInput = {
   currentPassword: string;
   newPassword: string;
-}
+};
 
-export interface TokenPair {
+export type TokenPair = {
   accessToken: string;
   refreshToken: string;
   tokenType: typeof TOKEN_TYPE;
   /** Seconds until the access token expires. */
   expiresIn: number;
-}
+};
 
 type AuthServiceDeps = {
   userRepository: Pick<
@@ -84,7 +85,7 @@ export const createAuthService = ({
         familyId,
         sessionVersion: user.sessionVersion,
         hash: sha256(secret).toString('hex'),
-        expiresAt: issuedAt + refreshTtlS * 1000,
+        expiresAt: issuedAt + refreshTtlS * MS_PER_SECOND,
       },
       issuedAt,
     );

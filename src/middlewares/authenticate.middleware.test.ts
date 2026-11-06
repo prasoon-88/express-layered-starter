@@ -2,8 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Request, Response } from 'express';
 import { AppError, UnauthorizedError } from '#errors';
-import APP_ERROR_CODES from '#constants/error/appErrorCodes.constant';
-import { createAuthenticate } from './authenticate.middleware.ts';
+import { APP_ERROR_CODES } from '#constants/error/appErrorCodes.constant';
+import { createAuthenticateMiddleware } from './authenticate.middleware.ts';
 
 type Claims = Record<string, unknown>;
 
@@ -15,7 +15,7 @@ const run = (authorization: string | undefined, verify: (token: string) => Claim
   const res = { set: (k: string, v: string) => (headers[k] = v) } as unknown as Response;
   const forwarded: unknown[] = [];
 
-  createAuthenticate({ accessTokens: { verify } })(req, res, (err?: unknown) =>
+  createAuthenticateMiddleware({ accessTokens: { verify } })(req, res, (err?: unknown) =>
     forwarded.push(err),
   );
   return { req, headers, err: forwarded[0], calls: forwarded.length };

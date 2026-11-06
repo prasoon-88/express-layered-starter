@@ -1,7 +1,7 @@
 import type { Env } from '#constants/env/schema';
 import type { Redis } from '#lib/redis/index';
 import type { Logger } from 'pino';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import { createIdempotent } from './middleware.ts';
 import { buildDefaultPolicies, createPolicyRegistry } from './policies.ts';
 import { createStoreReadinessCheck } from './readiness.ts';

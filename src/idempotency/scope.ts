@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { concatenateStrings } from '#utils/concateStrings';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 
 export type ScopeFn = (req: Request) => string;
 

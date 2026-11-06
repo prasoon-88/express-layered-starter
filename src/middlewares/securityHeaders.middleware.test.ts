@@ -4,7 +4,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { join } from 'node:path';
 import express from 'express';
-import securityHeadersMiddleware from './securityHeaders.middleware.ts';
+import { listen } from '#testing/http';
+import { createSecurityHeadersMiddleware } from './securityHeaders.middleware.ts';
 
 const VIEWS_DIR = join(import.meta.dirname, '../views');
 
@@ -20,23 +21,21 @@ const viewFiles = () =>
     .filter((file) => file.endsWith('.ejs'))
     .map((file) => readFileSync(join(VIEWS_DIR, file), 'utf8'));
 
-describe('securityHeadersMiddleware', () => {
+describe('createSecurityHeadersMiddleware', () => {
   let server: Server;
   let csp = '';
 
   before(async () => {
     const app = express();
-    app.use(securityHeadersMiddleware());
+    app.use(createSecurityHeadersMiddleware());
     app.get('/', (_req, res) => {
       res.send('ok');
     });
 
-    server = app.listen(0);
-    await new Promise((resolve) => server.once('listening', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
+    let baseUrl: string;
+    ({ server, baseUrl } = await listen(app));
 
-    const response = await fetch(`http://127.0.0.1:${address.port}/`);
+    const response = await fetch(`${baseUrl}/`);
     csp = response.headers.get('content-security-policy') ?? '';
   });
 

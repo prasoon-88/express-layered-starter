@@ -4,10 +4,13 @@ import type { Request, Response } from 'express';
 
 process.env.NODE_ENV ??= 'test';
 
-const { default: requestIdMiddleware } = await import('./requestId.middleware.ts');
-const { default: requestContext } = await import('#contexts/requestContext');
+const { createRequestIdMiddleware } = await import('./requestId.middleware.ts');
+const { requestContext } = await import('#contexts/requestContext');
 
-const run = (incoming: string | undefined, options?: Parameters<typeof requestIdMiddleware>[0]) => {
+const run = (
+  incoming: string | undefined,
+  options?: Parameters<typeof createRequestIdMiddleware>[0],
+) => {
   const sent: Record<string, string> = {};
   const req = {
     get: (name: string) => (name.toLowerCase() === 'x-request-id' ? incoming : undefined),
@@ -19,14 +22,14 @@ const run = (incoming: string | undefined, options?: Parameters<typeof requestId
   } as unknown as Response;
 
   let inContext: string | undefined;
-  requestIdMiddleware({ generator: () => 'generated-id', ...options })(req, res, () => {
+  createRequestIdMiddleware({ generator: () => 'generated-id', ...options })(req, res, () => {
     inContext = requestContext.getRequestId();
   });
 
   return { req, sent, inContext };
 };
 
-describe('requestIdMiddleware', () => {
+describe('createRequestIdMiddleware', () => {
   it('keeps a well-formed incoming id, echoes it, and exposes it to the request context', () => {
     const { req, sent, inContext } = run('abc-123_XYZ');
 

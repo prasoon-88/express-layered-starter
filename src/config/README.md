@@ -6,7 +6,7 @@
 - Server settings: `PORT`, `BASE_URL`, `NODE_ENV`
 - Database config: connection URL, name, options
 - Third-party service config: mail, storage, payment
-- Defaults for env vars (`process.env.PORT || 3000`)
+- Settings derived from env values, such as the logger's `pretty` from `NODE_ENV` (each variable's default is declared once, in `constants/env/schema.ts`)
 
 ## What does NOT go here
 - ❌ Fixed values that never change per environment (that's `constants/`)
@@ -31,7 +31,7 @@ Note the extra step: **`constants/env/` is the only place in the app that reads 
 ## Example
 ```js
 // config/mailer.config.ts
-import ENV_CONSTANTS from '#constants/env/index'
+import { ENV_CONSTANTS } from '#constants/env/index'
 
 export const mailerConfig = Object.freeze({
     host: ENV_CONSTANTS.SMTP_HOST,

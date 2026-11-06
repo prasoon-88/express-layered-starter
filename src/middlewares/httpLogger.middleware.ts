@@ -1,14 +1,15 @@
 import type { RequestHandler } from 'express';
 import type { Logger } from 'pino';
-import defaultLogger from '#lib/logger/index';
+import { logger as defaultLogger } from '#lib/logger/index';
 import { loggerConfig } from '#config/logger.config';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
+import { NS_PER_MS } from '#constants/time.constant';
 
-interface HttpLoggerOptions {
+type HttpLoggerOptions = {
   logger?: Logger;
   ignorePaths?: readonly string[];
   slowRequestMs?: number;
-}
+};
 
 const levelFor = ({
   status,
@@ -29,7 +30,7 @@ const stripQuery = (url: string) => {
   return queryStart === -1 ? url : url.slice(0, queryStart);
 };
 
-const httpLoggerMiddleware =
+export const createHttpLoggerMiddleware =
   ({
     logger = defaultLogger,
     ignorePaths = loggerConfig.ignorePaths,
@@ -49,7 +50,7 @@ const httpLoggerMiddleware =
       done = true;
 
       const endTime = process.hrtime.bigint();
-      const durationMs = Math.round((Number(endTime - startTime) / 1e6) * 100) / 100;
+      const durationMs = Math.round((Number(endTime - startTime) / NS_PER_MS) * 100) / 100;
       const status = res.statusCode;
       const aborted = event === 'close' && !res.writableFinished;
       const slow = durationMs >= slowRequestMs;
@@ -78,5 +79,3 @@ const httpLoggerMiddleware =
 
     next();
   };
-
-export default httpLoggerMiddleware;

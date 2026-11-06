@@ -4,7 +4,7 @@
 
 ## What goes here
 - Reading input: `req.params`, `req.body`, `req.query`, `req.file`
-- Declaring what an endpoint accepts: Zod schemas for `body`, `query` and `params`, through [`route()`](../lib/http/route.lib.ts)
+- Declaring what an endpoint accepts: Zod schemas for `body`, `query` and `params`, through [`route()`](../lib/http/route.ts)
 - Calling a service to do the actual work
 - Sending the response via [`apiResponse`](../utils/apiResponse.util.ts) — `ok`, `created`, `pagination`, `redirect`
 - Forwarding errors to the error middleware with `next(err)`
@@ -13,7 +13,7 @@
 - ❌ Business rules, including checks that need data such as "email already taken" (that's `services/`). Shape checks (types, formats, required fields) *do* belong here, as `route()` schemas.
 - ❌ Database access (that's `repository/`)
 - ❌ Knowing *how* data is stored or computed
-- ❌ Formatting error responses or picking error status codes (that's `middlewares/error.middleware.ts`)
+- ❌ Formatting error responses or picking error status codes (that's `middlewares/errorHandler.middleware.ts`)
 
 The controller should read like a short script: get input → call service → send output.
 
@@ -45,12 +45,12 @@ A controller with no dependencies (like the web page controllers) can stay a pla
 
 ## Validated endpoints with `route()`
 
-For JSON endpoints, wrap the controller in [`route()`](../lib/http/route.lib.ts). It validates the input before your code runs and forwards every error to the error middleware, so there is no `try`/`catch`:
+For JSON endpoints, wrap the controller in [`route()`](../lib/http/route.ts). It validates the input before your code runs and forwards every error to the error middleware, so there is no `try`/`catch`:
 
 ```ts
 // controllers/api/post.controller.ts
 import { z } from 'zod'
-import { route } from '#lib/http/route.lib'
+import { route } from '#lib/http/route'
 import type { PostService } from '#services/post.service'
 
 export const createPostController = ({ postService }: { postService: PostService }) => ({

@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
 import { z, type ZodType } from 'zod';
-import HTTP_STATUS from '#constants/http/httpStatus.constant';
-import { concatenateStrings } from '#utils/concateStrings';
-import { getRouteContract } from './route.lib.ts';
+import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
+import { getRouteContract } from './route.ts';
 
 // Everything here is derived from the route table and the `route()` schemas, which are what the
 // server enforces. Nothing is written by hand, so the document cannot drift from the code.

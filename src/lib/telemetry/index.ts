@@ -6,7 +6,7 @@ import { RedisInstrumentation } from '@opentelemetry/instrumentation-redis';
 import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import { startNodeSdk } from '@opentelemetry/sdk-node';
 import { telemetryConfig } from '#config/telemetry.config';
-import HTTP_HEADERS from '#constants/http/httpHeaders.constant';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
 import { isTelemetryStarted, markTelemetryStarted } from './state.ts';
 
 // The only file that imports the OpenTelemetry SDK, and only the preload imports it. The rest
