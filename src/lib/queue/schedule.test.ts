@@ -234,8 +234,18 @@ describe('syncJobSchedules', { skip: redisSkip }, () => {
   it('gives up, rather than loop, when every sync outlasts its lock', async () => {
     const prefix = `schedule-${randomUUID()}`;
     const one = defineSchedule({ id: 'tick', job: tick, payload: { n: 1 }, every: 60_000 });
+    // A fast Redis can finish a sync inside 1 ms: every read under the lock is made slower.
+    const slow = new Proxy(redis, {
+      get: (target, key, receiver) =>
+        key === 'get'
+          ? async (name: string) => {
+              await sleep(5);
+              return target.get(name);
+            }
+          : (Reflect.get(target, key, receiver) as unknown),
+    });
     await assert.rejects(
-      sync(prefix, [one], '1.0.0', { lockMs: 1 }),
+      sync(prefix, [one], '1.0.0', { redis: slow, lockMs: 1 }),
       /longer than their 1 ms lock 3 times/,
     );
   });
