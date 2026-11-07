@@ -28,6 +28,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | OpenAPI 3.1 document at `GET /api/docs/openapi.json`, generated from the mounted routes and their Zod schemas | [OpenAPI](#openapi) · [`openapi.ts`](src/lib/http/openapi.ts) |
 | Docker image (multi-stage, non-root, healthcheck) and a Compose file with Redis | [Docker](#docker) · [`Dockerfile`](Dockerfile) · [`compose.yaml`](compose.yaml) |
 | OpenTelemetry traces and metrics over OTLP (HTTP, Express, Redis), off until an endpoint is set; trace ids in every log line; Jaeger in Compose | [Observability](#observability) · [`lib/telemetry/`](src/lib/telemetry/) · [`instrumentation.ts`](src/instrumentation.ts) |
+| Background jobs on [BullMQ](https://docs.bullmq.io), in a separate worker process: typed queues and jobs, schedules, rate limits shared by every worker, retries with jittered backoff, timeouts, shutdown that puts running work back, crash recovery, failed-job commands, metrics | [Background jobs](#background-jobs) · [`lib/queue/`](src/lib/queue/) · [`worker.ts`](src/worker.ts) |
 | A working end-to-end endpoint to copy: `POST /api/v1/user/register` | [`user.controller.ts`](src/controllers/api/v1/user.controller.ts) · [`user.service.ts`](src/services/user.service.ts) |
 | Security headers, static serving, proxy-aware client IPs | [`app.ts`](src/app.ts) (`helmet`, `express.static`, `trust proxy`) |
 | Subpath imports (`#services/*`, `#errors`, …) | `package.json` → `imports` |
@@ -42,6 +43,7 @@ A Node.js + Express starter built on a clean **layered architecture** (routes �
 | [EJS](https://ejs.co/) | Server-side rendered views |
 | [ioredis](https://github.com/redis/ioredis) | The one Redis client: sessions, rate limits, idempotency, cache |
 | [BentoCache](https://bentocache.dev) | Cache engine under [`lib/cache/`](src/lib/cache/) |
+| [BullMQ](https://docs.bullmq.io) | Background job queue under [`lib/queue/`](src/lib/queue/), run by the worker process |
 | [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) | Access tokens (HS256), wrapped in [`lib/auth/accessToken.ts`](src/lib/auth/accessToken.ts) |
 | [helmet](https://helmetjs.github.io/) | Security headers, mounted on every response |
 | [TypeScript 6](https://www.typescriptlang.org/) | Strict type-checking; `tsc` compiles `src/` → `dist/` |
@@ -115,7 +117,7 @@ pnpm start   # node --import ./dist/instrumentation.js dist/server.js
 JWT_SECRET=<at least 32 characters> docker compose up --build --wait
 ```
 
-[`compose.yaml`](compose.yaml) runs the production image next to Redis, with `AUTH_STORE`, `RATE_LIMIT_STORE`, `IDEMPOTENCY_STORE` and `CACHE_STORE` all on Redis, so it behaves like a multi-instance deploy: sessions, limits, idempotency keys and cache entries survive an app restart. The app is on `http://localhost:8000` (`APP_PORT` changes the host port). `--wait` returns once both containers are healthy. `docker compose down` stops it; add `--volumes` to drop Redis's data as well. Use `pnpm dev` for day-to-day work.
+[`compose.yaml`](compose.yaml) runs the production image next to Redis, with `AUTH_STORE`, `RATE_LIMIT_STORE`, `IDEMPOTENCY_STORE` and `CACHE_STORE` all on Redis, so it behaves like a multi-instance deploy: sessions, limits, idempotency keys and cache entries survive an app restart. The app is on `http://localhost:8000` (`APP_PORT` changes the host port). The same image also runs as `worker`, the job worker (`dist/worker.js`), on `redis-queue`, a Redis of its own that never evicts and keeps an AOF; `docker compose up --scale worker=3` runs three. `--wait` returns once every container is healthy. `docker compose down` stops it; add `--volumes` to drop Redis's data as well. Use `pnpm dev` for day-to-day work.
 
 Compose sets the container's variables itself and does not load `.env` into it, so a local `NODE_ENV=development` never reaches the image. It does read `JWT_SECRET` and `APP_PORT` from the shell or `.env`, and refuses to start without `JWT_SECRET`. Add any other variable from [`.env.example`](.env.example) under `environment:`.
 
@@ -134,7 +136,8 @@ The [`Dockerfile`](Dockerfile) has three build stages and ships only the last:
 - **Node is PID 1**, started directly rather than through `pnpm start`, so `SIGTERM` reaches [`server.ts`](src/server.ts) and the drain in [`lib/lifecycle/`](src/lib/lifecycle/) runs. `stop_grace_period` (15s) is longer than `SHUTDOWN_TIMEOUT_MS` (8s by default); raise both together. Under Kubernetes the matching setting is `terminationGracePeriodSeconds`.
 - **The `HEALTHCHECK` probes `/health/live`**, with Node's `fetch` (Alpine has no curl). Liveness and not readiness, because Docker and Swarm restart an unhealthy container, and a restart cannot fix a Redis outage. Point the load balancer, or the Kubernetes readiness probe, at `/health/ready`.
 - **Secrets never enter the build.** [`.dockerignore`](.dockerignore) excludes `.env*`, along with `node_modules`, `dist` and `.git`. Pass `JWT_SECRET` and `REDIS_URL` at run time.
-- **Redis keeps an append-only file** on the `redis-data` volume, so revoked sessions stay revoked across a Redis restart.
+- **Redis keeps an append-only file** on the `redis-data` volume, so revoked sessions stay revoked across a Redis restart, and `redis-queue` on `redis-queue-data`, so jobs survive one.
+- **The worker's `HEALTHCHECK` probes its own health server**: Compose sets its `PORT` to `WORKER_HEALTH_PORT` (8001), the port the image's check reads.
 
 To look at traces, start Jaeger with the opt-in `observability` profile and point the app at it (see [Observability](#observability)):
 
@@ -145,7 +148,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318 OTEL_METRICS_EXPORTER=none \
 
 The Jaeger UI is on `http://localhost:16686`. Without the profile, Jaeger does not start, and the two variables stay empty, which leaves telemetry off.
 
-CI builds the image, starts the stack with `--wait`, and checks readiness, the OpenAPI document, a login and refresh stored in Redis, and that the process is not root ([`ci.yml`](.github/workflows/ci.yml), job `docker`).
+CI builds the image, starts the stack with `--wait`, and checks readiness, the OpenAPI document, a login and refresh stored in Redis, that neither process is root, that the worker runs a job the API image enqueued and has no failed jobs, and that it exits 0 on SIGTERM ([`ci.yml`](.github/workflows/ci.yml), job `docker`).
 
 ## TypeScript & build
 
@@ -199,11 +202,13 @@ express-layered-starter/
 ├── tsconfig.json        # type-check rules (editor, pnpm typecheck, ESLint)
 ├── tsconfig.build.json  # production build: src/ -> dist/
 ├── Dockerfile           # multi-stage production image
-├── compose.yaml         # the image plus Redis, every store on Redis
+├── compose.yaml         # the image as API and worker, Redis for the stores and for the queue
 ├── dist/                # compiled output (gitignored)
 └── src/
     ├── app.ts           # builds the Express app: container, route tree, middleware; no listen()
     ├── server.ts        # entry point — starts the HTTP server
+    ├── worker.ts        # entry point — starts the job workers (pnpm start:worker)
+    ├── jobsAdmin.ts     # entry point — lists and retries failed jobs (pnpm jobs)
     ├── instrumentation.ts # preload (--import): starts OpenTelemetry before the app loads
     ├── config/          # tunable settings, derived from env
     ├── constants/       # fixed values that never change
@@ -212,8 +217,9 @@ express-layered-starter/
     ├── errors/          # error classes + framework error converters
     ├── http/            # container, route definitions, access strategies, mount()
     ├── idempotency/     # Idempotency-Key replay (wired in server.ts and app.ts)
+    ├── jobs/            # one job definition per kind of background work: queue, payload, retries
     ├── cache/           # one cache spec per entity: schema, TTLs, tags
-    ├── lib/             # wrappers around external systems (logger, process lifecycle, route(), cache)
+    ├── lib/             # wrappers around external systems (logger, process lifecycle, route(), cache, queue)
     ├── middlewares/     # cross-cutting request concerns
     ├── models/          # data shapes / DB schemas
     ├── modules/         # one per feature: wires repository → service → controller → routes
@@ -224,6 +230,7 @@ express-layered-starter/
     ├── services/        # business logic, rules, orchestration
     ├── testing/         # helpers for *.test.ts only (#testing/*); not built, lint-blocked elsewhere
     ├── utils/           # small pure helpers
+    ├── workers/         # job handlers, run by the worker process
     └── views/           # EJS templates
 ```
 
@@ -541,6 +548,116 @@ await cache.invalidate(postCacheSpec.tags.one(id));
 
 Values live under `<SERVICE_NAME>:cache:<entity>:<schema hash>:<key>:<tokens hash>`, and the tokens, the epoch and the locks under `<SERVICE_NAME>:cache-v:`. A token lives twice `CACHE_MAX_TTL_S` and is renewed while it is read, so one in use never lapses. Point `REDIS_URL` at the primary: reads write too, when they make a missing token. The token script reads several keys at once, so Redis Cluster, which needs them in one slot, is not supported.
 
+## Background jobs
+
+Work that need not finish inside a request runs in a **separate worker process**: the same build and image as the API, started with its own command. A slow job never holds up a request, and the API and the workers scale apart. The engine is [BullMQ](https://docs.bullmq.io) on Redis; [`lib/queue/`](src/lib/queue/) puts a typed layer on top.
+
+```
+API (pnpm start)                                Worker (pnpm start:worker)
+  service ── jobs.enqueue(job, payload) ──► Redis queue ──► handler in workers/
+```
+
+| Command | Runs |
+|---|---|
+| `pnpm dev:worker` | The worker from `src/`, with `.env` loaded, restarting on changes |
+| `pnpm start:worker` | The compiled `dist/worker.js`, with the telemetry preload |
+| `docker compose up --scale worker=3` | Three workers next to the API, on the queue's own Redis |
+| `pnpm jobs failed [--queue q] [--limit n]` | The failed jobs, newest first, one line of JSON each (in a container: `node dist/jobsAdmin.js failed`) |
+| `pnpm jobs retry <queue> <jobId>` / `--all` | Puts one failed job, or all of a queue's, back with all their attempts |
+| `pnpm jobs schedules` / `pnpm jobs unschedule <queue> <id>` | Lists the schedules in Redis with their next run / removes one no code declares any more |
+
+**1. Define its queue** in [`src/jobs/queues.ts`](src/jobs/queues.ts), once, with what its work needs:
+
+```ts
+export const defaultQueue = defineQueue({ name: 'default' });
+export const emailQueue = defineQueue({
+  name: 'email',
+  concurrency: 10,                    // at once in each worker process; WORKER_CONCURRENCY otherwise
+  rateLimit: { max: 14, perMs: 1_000 }, // across every worker process together
+});
+```
+
+**2. Describe the job** in `src/jobs/<name>.job.ts`. A definition is pure, so any service can import it:
+
+```ts
+export const exampleJob = defineJob({
+  name: 'example.noop',               // <area>.<action>, unique across queues
+  queue: defaultQueue,
+  schema: z.object({ message: z.string().max(200) }),
+  attempts: 3,                        // the first run included
+  timeoutMs: 10_000,                  // a longer run fails, and is retried
+});
+```
+
+**3. Handle it** in `src/workers/<name>.worker.ts`, and list the handler in [`workers/index.ts`](src/workers/index.ts):
+
+```ts
+export const createExampleHandler = () =>
+  handleJob(exampleJob, async ({ message }, { signal, log, attempt }) => {
+    // the work; pass `signal` on, and stay safe to run twice
+  });
+```
+
+**4. Enqueue it** from a service, which receives `jobs` from the container:
+
+```ts
+await jobs.enqueue(exampleJob, { message: 'hello' }, { jobId: `example-${id}` });
+```
+
+**Or run it on a schedule**, listed in `createJobSchedules` in [`workers/index.ts`](src/workers/index.ts):
+
+```ts
+export const exampleSchedule = defineSchedule({
+  id: 'example-hourly',
+  job: exampleJob,
+  payload: { message: 'scheduled' },
+  every: 60 * 60 * 1_000,             // or cron: '0 3 * * *', timezone: 'Europe/Berlin'
+});
+```
+
+`example.noop`, its handler and its schedule do nothing, and the schedule is not listed: they show the shape, so copy them for real work and then delete them.
+
+**Two things this needs a database for:**
+
+- **Crash-proof enqueue needs the database branch.** `jobs.enqueue` after a database write is not atomic with it: a crash between the two loses the job. Enqueuing in the same transaction as the write (an outbox, as the cache has) needs a real database, so it comes with that branch. Until then, enqueue after the write, and give a `jobId` so a retried request enqueues once.
+- **Real email flows need the database too.** Password reset and email verification depend on it, and on a mailer, which is not built yet.
+
+**Behaviors worth knowing**
+
+- **A job runs at least once, and may run twice**: after a retry, or after a worker died mid-run. A handler checks before it acts, or makes its effect idempotent.
+- **The payload is checked twice**, against the job's schema: when it is enqueued (a mismatch is the caller's bug: `JobConfigError`, a 500) and again before it runs (a job written by an older deploy fails for good instead of running on a wrong shape). It is stored as JSON, so the schema must describe plain JSON input; `defineJob` refuses one that does not.
+- **A payload is capped at the job's `maxPayloadBytes`** (64 KiB by default), measured as BullMQ measures it, in bytes of its JSON. A larger one is refused when enqueued (`JobConfigError`) and when a schedule is defined; BullMQ's own `sizeLimit` stands behind the check. A payload names what to work on, and the handler reads the rest: the queue's Redis never evicts, so a large payload costs memory until its job is removed.
+- **Retries back off exponentially, with full jitter, up to `maxBackoffMs`** (an hour by default), so jobs that failed together do not retry together. A handler throws `PermanentJobError` for a failure no retry can fix: the job fails at once.
+- **`timeoutMs` aborts the handler's `signal`, and the run fails and is retried.** A handler that ignores the signal keeps running in the background while its retry starts, so pass it on to every call that takes one.
+- **`jobId` makes enqueueing idempotent.** A job with that id that is waiting, running, or completed in the last day is not added again. Ids are letters, digits, `.`, `_` and `-`, not all digits (BullMQ's own ids are), and never contain `:`.
+- **An enqueue fails fast and says so.** No queue configured gives `JobsUnavailableError`, and a queue that did not answer within 2 s gives `JobEnqueueError`; the error handler answers both with `503`. After a timeout the job may still land, which a `jobId` makes harmless.
+- **Shutdown puts unfinished work back.** On SIGTERM a worker stops taking jobs and waits up to `WORKER_SHUTDOWN_TIMEOUT_MS` for those running; any still running is cancelled and returned to the queue without spending an attempt. `WORKER_SHUTDOWN_TIMEOUT_MS` must be less than `SHUTDOWN_TIMEOUT_MS`, and the platform's grace period longer than both.
+- **A delayed job runs at or after its delay, not exactly at it.** On Redis below 6.0 BullMQ's blocking reads wait in whole seconds, so a delayed job can start up to a second late there (another reason for 6.2).
+- **A worker that dies mid-run loses nothing.** Its jobs' locks lapse (BullMQ's 30 s) and the next stall check by any worker (every 30 s) puts them back, so they run again within about a minute.
+- **The queue's Redis must keep what it is given.** A queue is data, not a cache: an evicting Redis deletes jobs under memory pressure. The worker checks at startup and, in production, refuses a Redis whose `maxmemory-policy` is not `noeviction` or whose version is below 5.0; it warns below 6.2 and without AOF. The cache wants the opposite (it evicts), so in production the queue gets its own Redis: `QUEUE_REDIS_URL`, which falls back to `REDIS_URL`. Compose runs it as `redis-queue`.
+- **Completed jobs are kept a day, failed ones a week.** A failed job stays in BullMQ's failed set: `pnpm jobs failed` lists it with why it failed, and `pnpm jobs retry` puts it back with all its attempts once the cause is fixed. A job that is no longer failed (already retried, or removed) is left alone, so a retry never runs a job twice.
+- **A worker reports its own health** on `WORKER_HEALTH_PORT` (8001): `/health/live`, and `/health/ready`, which is `200` only while every worker runs on a live connection. In Compose it is also `PORT`, so the image's `HEALTHCHECK` probes it.
+- **`WORKER_QUEUES` picks the queues a process serves**, so a busy queue can have workers of its own; all queues by default. A queue runs its `concurrency` jobs at once in each process, or `WORKER_CONCURRENCY` when it sets none.
+- **A rate limit holds across every worker process together.** BullMQ keeps it in one Redis key per queue, so ten workers of a queue limited to `{ max: 14, perMs: 1_000 }` still start 14 jobs a second: a provider's own limit can be set once, whatever the scale.
+- **A schedule runs once per due time, however many workers there are.** Each run is an ordinary job of its definition: same queue, payload check, attempts, backoff and timeout. Schedules are written to Redis by every worker at startup, for the queues it serves; a schedule for a job no handler runs stops the worker.
+- **A rolling deploy cannot undo a schedule change.** The schedules record the `SERVICE_VERSION` that wrote them, and a deploy older than that leaves them alone, so an old worker restarting mid-deploy never puts back what the new one changed. The check and the writes happen under a Redis lock, so two deploys syncing at once end with the newer one's.
+- **A schedule removed from the code stays in Redis until `pnpm jobs unschedule`.** Removing it at startup would let an older worker delete one a newer deploy added; the worker logs every schedule no code declares instead. Changing a schedule's `id` makes a new one and leaves the old one, too.
+
+**Metrics, and what to alert on** (from the worker process):
+
+| Metric | What it says | Alert when |
+|---|---|---|
+| `jobs.processed` (counter, by `queue`, `job`, `outcome`) | runs that `completed`, were `retried`, `failed` for good, or were `interrupted` by shutdown | `failed` keeps rising |
+| `jobs.duration` (histogram, ms) | how long a run took | its tail nears the job's `timeoutMs` |
+| `jobs.queue_wait` (histogram, ms) | how long a job waited, from when it was due (enqueued, plus its delay) to its first run | its tail grows: workers cannot keep up |
+| `jobs.count` (gauge, by `queue`, `state`) | `waiting`, `active`, `delayed` and `failed` jobs | `waiting` keeps growing: add workers |
+| `jobs.oldest_waiting_age` (gauge, ms, by `queue`) | how long the oldest waiting job has been due (a retried job counts from its first due time: BullMQ records no other) | it passes what the work can tolerate |
+| `jobs.stalled` (counter, by `queue`) | jobs whose worker stopped renewing their lock | it rises: workers are dying or blocking their event loop |
+
+Every worker process reports `jobs.count` and `jobs.oldest_waiting_age` for the queues it serves, from the same Redis, so several processes report the same values: aggregate them per queue with `max`, never `sum`.
+
+A trace started by a request continues into the jobs it enqueued ([`bullmq-otel`](https://www.npmjs.com/package/bullmq-otel)), and every log line from a job carries its queue, name, id and attempt.
+
 ## Health checks
 
 Two endpoints the platform polls, plus a plain alias:
@@ -625,13 +742,16 @@ await tracer.startActiveSpan('charge', async (span) => {
 | `pnpm typecheck:watch` | Same, re-running on every save |
 | `pnpm build` | Clean `dist/`, then compile with `tsconfig.build.json` — fails on any type error |
 | `pnpm start` | Run the compiled `dist/server.js` with the telemetry preload (expects env from the environment) |
+| `pnpm dev:worker` | Run the job worker (`src/worker.ts`) with `.env` loaded, restarting on changes; see [Background jobs](#background-jobs) |
+| `pnpm start:worker` | Run the compiled `dist/worker.js` with the telemetry preload |
+| `pnpm jobs failed` / `pnpm jobs retry <queue> <jobId|--all>` | List failed jobs, or put them back; see [Background jobs](#background-jobs) |
 | `pnpm lint` | ESLint (type-aware rules + layered-import enforcement) |
 | `pnpm format` | Rewrite files with Prettier |
 | `pnpm format:check` | Verify formatting without writing |
 | `pnpm test` | Run `src/**/*.test.ts` with Node's built-in test runner (no Jest/Vitest) |
 | `pnpm test:coverage` | The same, plus a coverage report; fails below 95% of lines or 88% of branches or functions |
 | `pnpm check` | Everything CI runs except the Docker job: typecheck → lint → format:check → test:coverage → build |
-| `docker compose up --build --wait` | The production image plus Redis (needs `JWT_SECRET`); see [Docker](#docker) |
+| `docker compose up --build --wait` | The production image as the API and the worker, plus Redis (needs `JWT_SECRET`); see [Docker](#docker) |
 
 ## Roadmap
 
@@ -659,3 +779,5 @@ await tracer.startActiveSpan('charge', async (span) => {
 - [x] Coverage thresholds in `pnpm check` and CI, counting files no test loads
 - [x] Password change and "log out everywhere", both ending sessions through `sessionVersion`
 - [x] Caching: a declared `Cache-Control` rule per route, ETags that produce `304`s, and a typed cache on BentoCache (memory or Redis) with tag invalidation
+- [x] Background jobs: typed queue and job definitions, a separate worker process (`pnpm start:worker`), retries with jittered backoff, timeouts, graceful shutdown that puts work back, schedules safe across rolling deploys, rate limits shared by every worker, failed-job commands, a queue Redis that must not evict
+- [ ] A database branch: crash-proof enqueue (an outbox written with the data), then password reset and email verification

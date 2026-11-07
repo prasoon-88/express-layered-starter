@@ -241,6 +241,31 @@ A typed, schema-checked layer over [BentoCache](https://bentocache.dev), pinned 
 - **`enabled: false` turns off reads and writes only.** The store is still built and invalidations still reach it. `CACHE_STORE=redis` with no client throws, enabled or not.
 - **`close`** stops the relay after a last delivery, stops the guard, disconnects BentoCache and drops the cache's own connection. The shared client belongs to `server.ts`, which closes it last.
 
+### `queue/`
+
+A typed layer over [BullMQ](https://docs.bullmq.io) on Redis. What it guarantees, and how to use it, is in the root [README](../../README.md#background-jobs).
+
+| File | Role |
+|------|------|
+| [`queue.ts`](queue/queue.ts) | `defineQueue`: a queue's name, its concurrency per process, and its rate limit across every process |
+| [`schedule.ts`](queue/schedule.ts) | `defineSchedule`, and `syncJobSchedules`, which writes them at worker startup under a Redis lock, ordered by `SERVICE_VERSION` so an older deploy never undoes a newer one's |
+| [`job.ts`](queue/job.ts) | `defineJob`: a job's name, queue, plain-JSON payload schema and policy (attempts, backoff, timeout, payload size). `checkPayloadSize`: the payload's JSON bytes, as BullMQ counts them. `retryDelay`: exponential backoff with full jitter, capped |
+| [`producer.ts`](queue/producer.ts) | `jobs.enqueue`: checks the payload and the `jobId`, adds the job with its policy, rejects within 2 s when Redis does not take it |
+| [`worker.ts`](queue/worker.ts) | `handleJob` and `startJobWorkers`: one BullMQ worker per queue, the payload checked again, the timeout, permanent errors, shutdown that puts running jobs back, the `jobs.*` metrics |
+| [`redis.ts`](queue/redis.ts) | `checkQueueRedis`: the Redis version, `maxmemory-policy noeviction` and AOF, checked by the worker at startup |
+| [`health.ts`](queue/health.ts) | The worker process's `/health/live` and `/health/ready` |
+| [`admin.ts`](queue/admin.ts) | `listFailedJobs`, `retryFailedJobs`, `listSchedules`, `removeSchedule` and `runJobsAdmin`: the `pnpm jobs` command ([`src/jobsAdmin.ts`](../jobsAdmin.ts)) |
+| [`errors.ts`](queue/errors.ts) | `JobConfigError`, `PermanentJobError`, `JobTimeoutError`, and `JobsUnavailableError` and `JobEnqueueError`, which the [queue converter](../errors/converter/queue.converter.ts) answers with a 503 |
+| [`index.ts`](queue/index.ts) | `initJobs` (the API's producer), `connectWorkerRedis`, and the public exports |
+
+- **Connections.** The API's producer opens one connection (to `QUEUE_REDIS_URL`, else `REDIS_URL`) that fails fast while disconnected, shared by every queue it adds to. A worker opens one with `maxRetriesPerRequest: null`, which BullMQ requires for its blocking reads, and BullMQ adds a blocking connection per queue.
+- **Where it departs from plain BullMQ, and why.**
+  - *Backoff.* BullMQ's exponential backoff has no cap, and its jitter only shaves the top; the jobs' own `policy` backoff is capped and spread over the whole range.
+  - *Shutdown.* A second `close(true)` does not force anything in BullMQ 6: it returns the close already under way. Past `WORKER_SHUTDOWN_TIMEOUT_MS` the layer cancels the running jobs (`cancelAllJobs`) and each one is returned to the queue (`moveToWait`) without spending an attempt.
+  - *Version check.* BullMQ checks the Redis version with `console.warn`. The queues are created with `skipVersionCheck`, and `checkQueueRedis` checks the same versions through the logger, with the eviction policy and AOF.
+- **Waiting time.** BullMQ resets a job's `delay` once it passes and records nothing for when a job became waiting; the layer measures from `timestamp + opts.delay`, which it keeps.
+- **Ids.** BullMQ refuses a custom `jobId` with a `:` or made only of digits; `enqueue` checks it first and says so.
+
 ### `telemetry/`
 
 The OpenTelemetry SDK, started by the preload [`src/instrumentation.ts`](../instrumentation.ts) before the app is imported. What it records and how to configure it is in the root [README](../../README.md#observability).

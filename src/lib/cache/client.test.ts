@@ -417,7 +417,7 @@ describe('createCache', () => {
         calls.push('acquire');
         return Promise.resolve(undefined);
       },
-      release: () => Promise.resolve(),
+      release: () => Promise.resolve(true),
     });
 
     it('returns what the holder stored, without loading or storing it again', async () => {
@@ -478,7 +478,7 @@ describe('createCache', () => {
           calls.push('acquire');
           return Promise.reject(new Error('store down'));
         },
-        release: () => Promise.resolve(),
+        release: () => Promise.resolve(true),
       };
       const { cache } = setup({ lock });
       const loader = counting(() => ada);

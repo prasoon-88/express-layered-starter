@@ -16,6 +16,7 @@ const RULES: Record<string, RegExp> = {
   config: /\.config\.ts$/,
   constants: /\.constant\.ts$|^env\/(index|schema)\.ts$/,
   controllers: /\.controller\.ts$/,
+  jobs: /\.job\.ts$|^queues\.ts$/,
   errors: /\.error\.ts$|^index\.ts$|^converter\/(\w+\.converter|index)\.ts$/,
   middlewares: /\.middleware\.ts$/,
   models: /\.model\.ts$/,
@@ -25,6 +26,7 @@ const RULES: Record<string, RegExp> = {
   schemas: /\.schema\.ts$/,
   services: /\.service\.ts$/,
   utils: /\.util\.ts$/,
+  workers: /\.worker\.ts$|^index\.ts$/,
 };
 
 const sourceFiles = (layer: string) =>

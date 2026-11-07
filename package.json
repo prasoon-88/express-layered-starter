@@ -13,6 +13,9 @@
     "prepare": "husky",
     "dev": "node --conditions=app-source --env-file=.env --watch --import ./src/instrumentation.ts src/server.ts",
     "start": "node --enable-source-maps --import ./dist/instrumentation.js dist/server.js",
+    "dev:worker": "node --conditions=app-source --env-file=.env --watch --import ./src/instrumentation.ts src/worker.ts",
+    "start:worker": "node --enable-source-maps --import ./dist/instrumentation.js dist/worker.js",
+    "jobs": "node --conditions=app-source --env-file-if-exists=.env src/jobsAdmin.ts",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/copy-views.js",
     "typecheck": "tsc -p tsconfig.json",
@@ -32,6 +35,14 @@
     "#cache/*": {
       "app-source": "./src/cache/*.ts",
       "default": "./dist/cache/*.js"
+    },
+    "#jobs/*": {
+      "app-source": "./src/jobs/*.ts",
+      "default": "./dist/jobs/*.js"
+    },
+    "#workers/*": {
+      "app-source": "./src/workers/*.ts",
+      "default": "./dist/workers/*.js"
     },
     "#config/*": {
       "app-source": "./src/config/*.ts",
@@ -125,6 +136,8 @@
     "@opentelemetry/instrumentation-runtime-node": "^0.38.0",
     "@opentelemetry/sdk-node": "^0.301.0",
     "bentocache": "1.6.1",
+    "bullmq": "^6.7.1",
+    "bullmq-otel": "^2.0.1",
     "cors": "^2.8.6",
     "ejs": "^7.0.2",
     "express": "^5.3.0",

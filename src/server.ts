@@ -3,6 +3,7 @@ import { initRateLimit } from '#rateLimiter';
 import { initIdempotency } from '#idempotency';
 import { createMemoryCacheOutbox, initCache } from '#lib/cache/index';
 import { getLogger } from '#lib/logger/index';
+import { initJobs } from '#lib/queue/index';
 import { ENV_CONSTANTS } from '#constants/env/index';
 import { createHttpServer } from '#lib/http/createHttpServer';
 import { registerProcessHandler } from '#lib/lifecycle/index';
@@ -39,6 +40,8 @@ export const idempotency = await initIdempotency(ENV_CONSTANTS, logger, redis);
 // same transaction as the data (see lib/cache/outbox.ts).
 const cacheOutbox = createMemoryCacheOutbox();
 const cache = initCache(ENV_CONSTANTS, logger, redis, { outbox: cacheOutbox });
+// Enqueues work for the worker process (src/worker.ts, `pnpm start:worker`).
+const jobs = await initJobs(ENV_CONSTANTS, logger);
 
 if (!authUsesRedis && ENV_CONSTANTS.NODE_ENV === 'production')
   logger.warn(
@@ -56,11 +59,13 @@ const { app } = createApp({
   idempotency,
   cache: cache.cache,
   cacheOutbox,
+  jobs: jobs.jobs,
   redis,
   readinessChecks: [
     ...rateLimiter.readinessChecks,
     ...idempotency.readinessChecks,
     ...cache.readinessChecks,
+    ...jobs.readinessChecks,
     ...authReadiness,
   ],
 });
@@ -77,6 +82,7 @@ registerProcessHandler({
     () => rateLimiter.close(),
     () => idempotency.close(),
     () => cache.close(),
+    () => jobs.close(),
     async () => {
       if (redis) await closeRedisClient(redis);
     },

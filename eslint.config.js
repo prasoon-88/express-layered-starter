@@ -19,7 +19,17 @@ const ALLOW = {
   // Cache specs: pure descriptions (defineCacheSpec), so any data layer may import them.
   cache: ['models', 'lib', 'constants'],
   repository: ['cache', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
-  services: ['cache', 'repository', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
+  services: [
+    'cache',
+    'jobs',
+    'repository',
+    'models',
+    'utils',
+    'lib',
+    'errors',
+    'config',
+    'constants',
+  ],
   controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants', 'schemas'],
   // Route files receive controllers and middleware as arguments (see src/http/README.md).
   routes: ['http', 'middlewares', 'constants', 'config'],
@@ -44,6 +54,21 @@ const ALLOW = {
     'schemas',
   ],
   // Entry files (server.ts, app.ts) wire it in; no other layer may depend on it.
+  // Job definitions: pure descriptions (defineJob), so a service can import one to enqueue it.
+  jobs: ['models', 'lib', 'constants'],
+  // Job handlers, built with their dependencies the way a module builds a service.
+  workers: [
+    'jobs',
+    'services',
+    'repository',
+    'cache',
+    'models',
+    'lib',
+    'utils',
+    'errors',
+    'config',
+    'constants',
+  ],
   rateLimiter: ['constants', 'config', 'lib', 'utils', 'errors', 'schemas'],
   idempotency: ['constants', 'config', 'lib', 'utils', 'errors', 'schemas'],
 };

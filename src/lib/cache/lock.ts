@@ -9,8 +9,12 @@ import { defineScript, type Redis } from '#lib/redis/index';
 export type KeyLock = {
   /** A token when this caller now holds the lock, `undefined` when another holder has it. */
   acquire: (key: string, ttlMs: number) => Promise<string | undefined>;
-  /** Releases the lock only if `token` still holds it, so a lapsed holder never frees another's. */
-  release: (key: string, token: string) => Promise<void>;
+  /**
+   * Releases the lock only if `token` still holds it, so a lapsed holder never frees another's.
+   * True when it did: the lock was held all along, since a lapsed key never comes back with the
+   * same token.
+   */
+  release: (key: string, token: string) => Promise<boolean>;
 };
 
 const RELEASE = defineScript(`
@@ -25,8 +29,6 @@ export const createRedisKeyLock = (redis: Redis, { prefix }: { prefix: string })
       const token = randomUUID();
       return (await redis.set(lockKey(key), token, 'PX', ttlMs, 'NX')) === 'OK' ? token : undefined;
     },
-    release: async (key, token) => {
-      await RELEASE(redis, [lockKey(key)], [token]);
-    },
+    release: async (key, token) => (await RELEASE(redis, [lockKey(key)], [token])) === 1,
   };
 };

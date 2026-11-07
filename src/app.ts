@@ -14,6 +14,7 @@ import type { RateLimiter } from '#rateLimiter';
 import type { Idempotency } from '#idempotency';
 import type { Redis } from '#lib/redis/index';
 import type { Cache, MemoryCacheOutbox } from '#lib/cache/index';
+import type { Jobs } from '#lib/queue/index';
 import { createContainer } from '#http/container';
 import { mount } from '#http/mount';
 import { defineGroup } from '#http/routes';
@@ -31,6 +32,8 @@ declare module '#http/registry' {
     cache: Cache;
     /** Where a repository records, with a write, the cache tags it changed. Registered when given. */
     cacheOutbox: MemoryCacheOutbox;
+    /** Enqueues background jobs for the worker process. Registered when given. */
+    jobs: Jobs;
     /** Registered only when server.ts opened a connection. */
     redis: Redis;
   }
@@ -43,6 +46,8 @@ export type AppConfig = {
   cache: Cache;
   /** The outbox initCache delivers from, for repositories to record invalidations in. */
   cacheOutbox?: MemoryCacheOutbox;
+  /** The job producer from initJobs, for services that enqueue work for the worker process. */
+  jobs?: Jobs;
   /** Dependencies `/health/ready` probes. Whoever creates a dependency passes its check in. */
   readinessChecks?: readonly ReadinessCheck[];
   /** The shared client, when a store is set to redis. A feature that needs it without it stops the boot. */
@@ -55,6 +60,7 @@ export const createApp = ({
   idempotency,
   cache,
   cacheOutbox,
+  jobs,
   readinessChecks = [],
   redis,
 }: AppConfig) => {
@@ -66,6 +72,7 @@ export const createApp = ({
   container.provide('readinessChecks', () => readinessChecks);
   container.provide('cache', () => cache);
   if (cacheOutbox) container.provide('cacheOutbox', () => cacheOutbox);
+  if (jobs) container.provide('jobs', () => jobs);
   container.provide('authorize', () => createAuthorizeMiddleware);
 
   // Health sits outside the group that carries the global limit and the request timeout,

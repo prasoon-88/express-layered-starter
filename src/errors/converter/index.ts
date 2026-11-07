@@ -1,9 +1,10 @@
 import { cacheConverter } from './cache.converter.ts';
 import { httpConverter } from './http.converter.ts';
 import { jwtConverter } from './jwt.converter.ts';
+import { queueConverter } from './queue.converter.ts';
 import { zodConverter } from './zod.converter.ts';
 
-const converters = [zodConverter, httpConverter, jwtConverter, cacheConverter];
+const converters = [zodConverter, httpConverter, jwtConverter, cacheConverter, queueConverter];
 
 export const convertError = (err: unknown) => {
   for (const converter of converters) {

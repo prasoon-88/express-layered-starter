@@ -39,6 +39,12 @@ import {
   MIN_CACHE_INTERVAL_MS,
   MIN_CACHE_MEMORY_MAX_ENTRIES,
 } from '#constants/cache.constant';
+import {
+  DEFAULT_WORKER_CONCURRENCY,
+  DEFAULT_WORKER_HEALTH_PORT,
+  DEFAULT_WORKER_SHUTDOWN_TIMEOUT_MS,
+  MAX_WORKER_CONCURRENCY,
+} from '#constants/queue.constant';
 import { REGEX } from '#constants/regex.constant';
 import {
   AUTH_STORES,
@@ -182,6 +188,20 @@ const envSchema = z.preprocess(
         .regex(REGEX.REDIS_URL, 'Expected a redis:// or rediss:// URL')
         .optional(),
       REDIS_CONNECT_TIMEOUT_MS: wholeNumber({ min: 1, max: MAX_TIMER_MS }).default(5000),
+      // Defaults to REDIS_URL. In production, a Redis of its own: a queue must never be evicted.
+      QUEUE_REDIS_URL: z
+        .string()
+        .trim()
+        .regex(REGEX.REDIS_URL, 'Expected a redis:// or rediss:// URL')
+        .optional(),
+      WORKER_QUEUES: list.optional(),
+      WORKER_CONCURRENCY: wholeNumber({ min: 1, max: MAX_WORKER_CONCURRENCY }).default(
+        DEFAULT_WORKER_CONCURRENCY,
+      ),
+      WORKER_SHUTDOWN_TIMEOUT_MS: wholeNumber({ min: 1, max: MAX_TIMER_MS }).default(
+        DEFAULT_WORKER_SHUTDOWN_TIMEOUT_MS,
+      ),
+      WORKER_HEALTH_PORT: wholeNumber({ min: 1, max: 65_535 }).default(DEFAULT_WORKER_HEALTH_PORT),
       RATE_LIMIT_ENABLED: bool(true),
       RATE_LIMIT_STORE: z.enum(RATE_LIMIT_STORES).default(DEFAULT_RATE_LIMIT_STORE),
       RATE_LIMIT_ON_STORE_ERROR: z
@@ -252,6 +272,10 @@ const envSchema = z.preprocess(
 
       if (e.SHUTDOWN_DELAY_MS >= e.SHUTDOWN_TIMEOUT_MS)
         addIssue(['SHUTDOWN_DELAY_MS'], 'Must be less than SHUTDOWN_TIMEOUT_MS');
+
+      // A worker waits this long for its jobs, inside the process's whole shutdown budget.
+      if (e.WORKER_SHUTDOWN_TIMEOUT_MS >= e.SHUTDOWN_TIMEOUT_MS)
+        addIssue(['WORKER_SHUTDOWN_TIMEOUT_MS'], 'Must be less than SHUTDOWN_TIMEOUT_MS');
 
       if (e.NODE_ENV === 'production') {
         if (e.LOG_PRETTY) addIssue(['LOG_PRETTY'], 'Disable in production');

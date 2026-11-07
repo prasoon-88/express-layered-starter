@@ -56,6 +56,9 @@ describe('parseEnv', () => {
         CACHE_L1_ENABLED: false,
         CACHE_OUTBOX_POLL_MS: 1_000,
         CACHE_PRIMARY_CHECK_MS: 5_000,
+        WORKER_CONCURRENCY: 5,
+        WORKER_SHUTDOWN_TIMEOUT_MS: 6_000,
+        WORKER_HEALTH_PORT: 8001,
         AUTH_STORE: 'memory',
         JWT_ACCESS_TTL_S: 900,
         JWT_REFRESH_TTL_S: 2_592_000,
@@ -276,6 +279,23 @@ describe('parseEnv', () => {
       const env = parse({ IDEMPOTENCY_ENABLED: 'false', IDEMPOTENCY_STORE: 'redis' });
       assert.equal(env.IDEMPOTENCY_ENABLED, false);
       assert.equal(env.REDIS_URL, undefined);
+    });
+  });
+
+  describe('queue and worker', () => {
+    it('takes a queue Redis of its own, and the queues a worker serves', () => {
+      const env = parse({ QUEUE_REDIS_URL: 'redis://queue:6379', WORKER_QUEUES: 'email, default' });
+      assert.equal(env.QUEUE_REDIS_URL, 'redis://queue:6379');
+      assert.deepEqual(env.WORKER_QUEUES, ['email', 'default']);
+      assert.throws(() => parse({ QUEUE_REDIS_URL: 'http://queue' }), /QUEUE_REDIS_URL/);
+    });
+
+    it('keeps the worker shutdown inside the process shutdown budget', () => {
+      assert.throws(
+        () => parse({ WORKER_SHUTDOWN_TIMEOUT_MS: '8000', SHUTDOWN_TIMEOUT_MS: '8000' }),
+        /WORKER_SHUTDOWN_TIMEOUT_MS/,
+      );
+      assert.throws(() => parse({ WORKER_CONCURRENCY: '0' }), /WORKER_CONCURRENCY/);
     });
   });
 

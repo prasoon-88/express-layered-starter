@@ -13,6 +13,8 @@ This app uses a **layered architecture**. Each layer has one job and only talks 
 | Repository | [`repository/`](repository/) | Raw database access | ❌ | ✅ |
 | Model | [`models/`](models/) | Data shape / schema | ❌ | — |
 | Cache spec | [`cache/`](cache/) | What is cached about an entity, and its tags | ❌ | ❌ |
+| Job | [`jobs/`](jobs/) | One kind of background work: its queue, payload schema and retries | ❌ | ❌ |
+| Job handler | [`workers/`](workers/) | Runs a job in the worker process, with its dependencies | ❌ | via repositories |
 
 **Cross-cutting (sit beside the layers, not in them):**
 [`middlewares/`](middlewares/) · [`errors/`](errors/) · [`contexts/`](contexts/)
@@ -129,6 +131,7 @@ Note what the controller does *not* do: no status codes picked by hand, no error
 | Is it a tiny generic helper (pure function)? | `utils/` |
 | Does it wrap an external system or SDK? | `lib/` |
 | Does it count, throttle or report request volume? | `rateLimiter/` |
+| Is it work that can finish after the response, or must survive a crash? | a job in `jobs/`, handled in `workers/` |
 | Does it declare a URL, its access rule and its middleware? | `routes/` |
 | Does it wire one feature's repository, service, controller and routes? | `modules/` |
 | Does it assemble, check or supply routes for every feature? | `http/` |
@@ -151,9 +154,13 @@ utils/       ← may use config + constants + errors + lib
    ↑
 cache/       ← uses models, lib/cache (defineCacheSpec only)
    ↑
+jobs/        ← uses models, lib/queue (defineJob only)
+   ↑
 repository/  ← uses models, cache, lib
    ↑
-services/    ← uses repository, utils, lib, errors, config
+services/    ← uses repository, jobs, utils, lib, errors, config
+   ↑
+workers/     ← uses jobs, services, repository, lib: the worker process's composition
    ↑
 controllers/ ← uses services (types), utils, errors, lib (route()), schemas (shared rules such as newPasswordSchema)
    ↑
@@ -200,7 +207,7 @@ The ones marked **lint** or **test** fail `pnpm check` when broken; the rest are
 
 | Rule | Example | Enforced by |
 |------|---------|-------------|
-| A file in a layer folder ends in its layer: `.service.ts`, `.controller.ts`, `.repository.ts`, `.routes.ts`, `.middleware.ts`, `.module.ts`, `.constant.ts`, `.config.ts`, `.error.ts`, `.converter.ts`, `.schema.ts`, `.util.ts`, `.model.ts`. `index.ts` only for a folder's entry point or a group of routes or modules | `health/health.controller.ts`, `routes/api/v1/index.ts` | **test** ([`conventions.test.ts`](conventions.test.ts)) |
+| A file in a layer folder ends in its layer: `.service.ts`, `.controller.ts`, `.repository.ts`, `.routes.ts`, `.middleware.ts`, `.module.ts`, `.constant.ts`, `.config.ts`, `.error.ts`, `.converter.ts`, `.schema.ts`, `.util.ts`, `.model.ts`, `.cache.ts`, `.job.ts`, `.worker.ts`. `index.ts` only for a folder's entry point or a group of routes or modules | `health/health.controller.ts`, `routes/api/v1/index.ts` | **test** ([`conventions.test.ts`](conventions.test.ts)) |
 | A feature folder (`lib/<system>/`, `http/`, `rateLimiter/`, `idempotency/`, `contexts/`) names the role, so its files have no suffix | `lib/http/route.ts`, `rateLimiter/engine.ts` | review |
 | Named exports only. The export is named after the file | `http.converter.ts` → `httpConverter` | **lint** |
 | A function that builds something is `create<Thing>`; a middleware factory is `create<Name>Middleware`, a ready handler `<name>Middleware` | `createAuthService`, `createCorsMiddleware`, `notFoundMiddleware` | review |
