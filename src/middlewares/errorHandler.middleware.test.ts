@@ -11,7 +11,13 @@ class FakeResponse {
   headersSent = false;
   statusCode = 200;
   locals: Record<string, unknown> = {};
+  headers: Record<string, string> = {};
   body: unknown;
+
+  set(name: string, value: string) {
+    this.headers[name] = value;
+    return this;
+  }
 
   status(code: number) {
     this.statusCode = code;
@@ -24,8 +30,7 @@ class FakeResponse {
   }
 }
 
-const handle = (err: unknown) => {
-  const res = new FakeResponse();
+const handle = (err: unknown, res = new FakeResponse()) => {
   const req = { id: 'req-1', originalUrl: '/api/x', xhr: false } as unknown as Request;
   errorHandlerMiddleware(err, req, res as unknown as Response, (() => {}) as NextFunction);
   return res;
@@ -44,6 +49,17 @@ describe('errorHandlerMiddleware', () => {
 
     assert.equal(res.statusCode, 500);
     assert.equal(res.locals.errorCode, 'INTERNAL_ERROR');
+  });
+
+  it("answers no-store, replacing the route's cache rule, and keeps Vary", () => {
+    const res = new FakeResponse()
+      .set('Cache-Control', 'public, max-age=60')
+      .set('Vary', 'Authorization');
+
+    handle(new NotFoundError('nope'), res);
+
+    assert.equal(res.headers['Cache-Control'], 'no-store');
+    assert.equal(res.headers.Vary, 'Authorization');
   });
 
   it('keeps the message of an unexpected error away from the client', () => {

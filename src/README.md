@@ -12,6 +12,7 @@ This app uses a **layered architecture**. Each layer has one job and only talks 
 | Service | [`services/`](services/) | Business logic & rules | ❌ | ❌ |
 | Repository | [`repository/`](repository/) | Raw database access | ❌ | ✅ |
 | Model | [`models/`](models/) | Data shape / schema | ❌ | — |
+| Cache spec | [`cache/`](cache/) | What is cached about an entity, and its tags | ❌ | ❌ |
 
 **Cross-cutting (sit beside the layers, not in them):**
 [`middlewares/`](middlewares/) · [`errors/`](errors/) · [`contexts/`](contexts/)
@@ -148,7 +149,9 @@ lib/         ← may use config + constants + contexts (+ leaf utils)
    ↑
 utils/       ← may use config + constants + errors + lib
    ↑
-repository/  ← uses models
+cache/       ← uses models, lib/cache (defineCacheSpec only)
+   ↑
+repository/  ← uses models, cache, lib
    ↑
 services/    ← uses repository, utils, lib, errors, config
    ↑
@@ -160,7 +163,7 @@ modules/     ← composition: may use every layer above except rateLimiter/idemp
    ↑
 app.ts       ← the route tree and the container
 
-http/        ← uses constants only. Imported by routes/, modules/ and app.ts.
+http/        ← uses constants (+ leaf utils) only. Imported by routes/, modules/ and app.ts.
 
 rateLimiter/ ← uses constants, config, lib, utils, errors, schemas. Nothing imports it
 idempotency/   except the entry files: server.ts builds them, app.ts registers their
@@ -174,7 +177,7 @@ instrumentation.ts ← the preload (`--import`): config + lib/telemetry, before 
 
 **Dependencies point downward only.** A lower layer must never import an upper layer (e.g. a service never imports a controller) — that creates circular dependencies and breaks reusability.
 
-**One exception: leaf utils.** A util with **no imports of its own** (such as [`sleep.util.ts`](utils/sleep.util.ts)) sits at the bottom of the graph and may be used by any layer, including `lib/`. It cannot create a cycle because it depends on nothing. A util that imports `lib/` (like `apiResponse.util.ts`) is not a leaf and stays above it.
+**One exception: leaf utils.** A util with **no imports of its own** (such as [`sleep.util.ts`](utils/sleep.util.ts)) sits at the bottom of the graph and may be used by any layer, including `lib/` and `http/`. It cannot create a cycle because it depends on nothing. The leaf utils are listed in `LEAF_UTILS` in [`eslint.config.js`](../eslint.config.js), which also fails a listed util that gains an internal import. A util that imports `lib/` (like `apiResponse.util.ts`) is not a leaf and stays above it.
 
 Imports across folders use the subpath aliases declared in `package.json`:
 

@@ -1,3 +1,4 @@
+import { concatenateStrings } from '#utils/concatenateStrings.util';
 import { ContainerError } from './errors.ts';
 import type { Factory, Get, Key, Registry } from './registry.ts';
 
@@ -44,11 +45,13 @@ export const createContainer = () => {
     if (!entry)
       throw new ContainerError(
         resolving.length
-          ? `No provider for "${key}" (needed by ${resolving.join(' -> ')})`
+          ? `No provider for "${key}" (needed by ${concatenateStrings(resolving, ' -> ')})`
           : `No provider for "${key}"`,
       );
     if (resolving.includes(key))
-      throw new ContainerError(`Circular dependency: ${[...resolving, key].join(' -> ')}`);
+      throw new ContainerError(
+        `Circular dependency: ${concatenateStrings([...resolving, key], ' -> ')}`,
+      );
 
     resolving.push(key);
     try {

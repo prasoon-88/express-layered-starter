@@ -40,7 +40,7 @@ const createRequestIdMiddleware = ({ header = HTTP_HEADERS.X_REQUEST_ID, trustIn
     }
 ```
 
-Mounted with `app.use(createRequestIdMiddleware())` — note the call. Middleware with nothing to configure (`notFoundMiddleware`, `errorHandlerMiddleware`, `noStoreMiddleware`) is exported as a plain handler and mounted without parentheses.
+Mounted with `app.use(createRequestIdMiddleware())` — note the call. Middleware with nothing to configure (`notFoundMiddleware`, `errorHandlerMiddleware`) is exported as a plain handler and mounted without parentheses.
 
 The name says which one you have: a factory is `create<Name>Middleware`, a ready handler is `<name>Middleware`, where `<name>` is the file's (`requestId.middleware.ts` exports `createRequestIdMiddleware`).
 
@@ -52,9 +52,10 @@ The name says which one you have: a factory is `create<Name>Middleware`, a ready
 | `httpLogger.middleware.ts` | One access log line per request with method, path, status, duration, IP; warns on slow or aborted requests; skips configured paths |
 | `authenticate.middleware.ts` | `createAuthenticateMiddleware({ accessTokens })`: verifies `Authorization: Bearer <jwt>`, validates the claims with `authUserSchema`, sets `req.user`. A `401` carries `WWW-Authenticate`. The auth module provides it; the `authenticated` and `roles` strategies run it |
 | `authorize.middleware.ts` | `createAuthorizeMiddleware(roles)`, registered as the container's `authorize`: `403` unless `req.user.role` is listed, `401` if nobody was authenticated. The `roles` access strategy puts it after `authenticate` |
-| `noStore.middleware.ts` | `Cache-Control: no-store`, for health probes and token responses |
 | `notFound.middleware.ts` | Converts an unmatched route into a `NotFoundError` |
-| `errorHandler.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view |
+| `errorHandler.middleware.ts` | Normalizes anything thrown, logs it once, responds as JSON or a rendered view, always with `Cache-Control: no-store` |
+
+A route's `Cache-Control` is not set by middleware here: it is the route's `cache` rule, which `mount` applies (see [`http/README.md`](../http/README.md#cache-rules)).
 
 ## Writing one
 

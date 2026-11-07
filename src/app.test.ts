@@ -4,17 +4,22 @@ import type { Server } from 'node:http';
 import type { RequestHandler } from 'express';
 import { randomUUID } from 'node:crypto';
 import pino from 'pino';
+import { TooManyRequestsError } from '#errors';
 import { initIdempotency } from '#idempotency';
 import { closeRedisClient, createRedisClient, type Redis } from '#lib/redis/index';
-import { listen, postJson } from '#testing/http';
+import { listen, postJson, revalidate } from '#testing/http';
 import { freePort, redisSkip, startRedisServer } from '#testing/redisServer';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
 const { createApp } = await import('./app.ts');
 const { parseEnv } = await import('#constants/env/schema');
+const { initCache } = await import('#lib/cache/index');
 
 type AppOptions = Parameters<typeof createApp>[0];
+
+const memoryCache = () =>
+  initCache(parseEnv({ NODE_ENV: 'test' }), pino({ level: 'silent' })).cache;
 
 const startApp = (
   options: Pick<AppOptions, 'rl' | 'readinessChecks'> & Partial<Pick<AppOptions, 'idempotency'>>,
@@ -22,6 +27,7 @@ const startApp = (
   const { app } = createApp({
     env: parseEnv({ NODE_ENV: 'test' }),
     idempotency: { idempotent: () => passThrough },
+    cache: memoryCache(),
     ...options,
   });
   return listen(app);
@@ -81,6 +87,7 @@ describe('createApp middleware order', () => {
     const body = (await response.json()) as { success: boolean; code: string };
 
     assert.equal(response.status, 404);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
     assert.equal(body.success, false);
     assert.equal(body.code, 'ROUTE_NOT_FOUND');
   });
@@ -92,6 +99,7 @@ describe('createApp route table', () => {
       env: parseEnv({ NODE_ENV: 'test' }),
       rl: { limit: () => passThrough },
       idempotency: { idempotent: () => passThrough },
+      cache: memoryCache(),
     });
 
   it('serves only these routes without credentials', () => {
@@ -122,6 +130,7 @@ describe('createApp route table', () => {
           env: parseEnv({ NODE_ENV: 'test', AUTH_STORE: 'redis', REDIS_URL: 'redis://x:6379' }),
           rl: { limit: () => passThrough },
           idempotency: { idempotent: () => passThrough },
+          cache: memoryCache(),
         }),
       /redis/,
     );
@@ -192,6 +201,20 @@ describe('createApp health endpoints', () => {
     assert.deepEqual((await json(response)).data, {
       status: 'degraded',
       checks: [{ name: 'redis', status: 'down' }],
+    });
+  });
+
+  it('stays ready, reporting cache-store down, when only the cache store is dead', async () => {
+    const baseUrl = await start([
+      { name: 'cache-store', critical: false, run: () => Promise.reject(new Error('down')) },
+    ]);
+
+    const response = await fetch(`${baseUrl}/health/ready`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual((await json(response)).data, {
+      status: 'degraded',
+      checks: [{ name: 'cache-store', status: 'down' }],
     });
   });
 
@@ -572,6 +595,7 @@ describe('sessions shared through Redis (AUTH_STORE=redis)', { skip: redisSkip }
       env,
       rl: { limit: () => passThrough },
       idempotency: { idempotent: () => passThrough },
+      cache: memoryCache(),
       redis,
     });
     const { server, baseUrl } = await listen(app);
@@ -633,6 +657,7 @@ describe('GET /api/docs/openapi.json', () => {
       env: parseEnv({ NODE_ENV: 'test' }),
       rl: { limit: () => passThrough },
       idempotency: { idempotent: () => passThrough },
+      cache: memoryCache(),
     }).routes;
   });
 
@@ -685,8 +710,46 @@ describe('GET /api/docs/openapi.json', () => {
     assert.ok('204' in (paths['/api/v1/auth/logout']?.post?.responses ?? {}));
   });
 
+  it('lets any cache keep the document for five minutes', async () => {
+    const response = await fetch(`${baseUrl}/api/docs/openapi.json`);
+
+    assert.equal(response.headers.get('Cache-Control'), 'public, max-age=300');
+  });
+
   it('serves the same document on every request', async () => {
     assert.deepEqual(await fetchDoc(), await fetchDoc());
+  });
+
+  it('answers a revalidation with 304 and an empty body', async () => {
+    const etag = (await fetch(`${baseUrl}/api/docs/openapi.json`)).headers.get('ETag') ?? '';
+
+    const revalidated = await revalidate(`${baseUrl}/api/docs/openapi.json`, etag);
+
+    assert.equal(revalidated.status, 304);
+    assert.equal(await revalidated.text(), '');
+  });
+});
+
+describe('a rate-limited request to a cacheable GET', () => {
+  let server: Server;
+  let baseUrl = '';
+
+  before(async () => {
+    const tooMany: RequestHandler = (_req, _res, next) => {
+      next(new TooManyRequestsError());
+    };
+    ({ server, baseUrl } = await startApp({ rl: { limit: () => tooMany } }));
+  });
+
+  after(() => {
+    server.close();
+  });
+
+  it('goes out as no-store, not with the route max-age', async () => {
+    const response = await fetch(`${baseUrl}/api/docs/openapi.json`);
+
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
   });
 });
 

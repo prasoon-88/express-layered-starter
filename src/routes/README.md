@@ -5,6 +5,7 @@
 ## What goes here
 - Route definition functions built with [`defineRoute` and `defineGroup`](../http/routes.ts)
 - The access rule of every route (`public` with a reason, `authenticated`, or `roles`)
+- The cache rule of a route, when the default does not fit (see [`http/README.md`](../http/README.md#cache-rules))
 - Route-level middleware, in order: rate limits, idempotency, anything else
 
 ## What does NOT go here
@@ -32,6 +33,7 @@ export const postRoutes = ({ postController, limit, idempotent }: PostRoutesDeps
       method: 'get',
       path: '/:id',                                          // GET  /api/v1/post/:id
       access: { strategy: 'public', reason: 'Posts are readable without an account' },
+      cache: { mode: 'fresh', maxAgeS: 60 },                // optional: a GET defaults to private, no-cache
       handlers: [postController.getPost],
     }),
     defineRoute({
@@ -65,7 +67,7 @@ JSON body parsing is mounted on the API group only, since the web routes render 
 
 ## Rules the mounter enforces
 
-Every route needs an access rule, paths use only static segments and `:params`, and a route that an earlier one always answers stops the boot. The full list is in [`http/README.md`](../http/README.md#what-stops-the-boot).
+Every route needs an access rule, a route that needs credentials can never be `shared`, a non-GET may only declare `no-store`, paths use only static segments and `:params`, and a route that an earlier one always answers stops the boot. The full list is in [`http/README.md`](../http/README.md#what-stops-the-boot).
 
 ## Rule of thumb
 > If a route file has an `if` statement or a `db.` call, logic has leaked in. Move it down to the controller or service.

@@ -48,6 +48,14 @@ describe('parseEnv', () => {
         IDEMPOTENCY_TTL_S: 86_400,
         IDEMPOTENCY_LOCK_TTL_S: 60,
         IDEMPOTENCY_MAX_BODY_BYTES: 256 * 1024,
+        CACHE_ENABLED: true,
+        CACHE_STORE: 'memory',
+        CACHE_MEMORY_MAX_ENTRIES: 10_000,
+        CACHE_OP_TIMEOUT_MS: 100,
+        CACHE_MAX_TTL_S: 86_400,
+        CACHE_L1_ENABLED: false,
+        CACHE_OUTBOX_POLL_MS: 1_000,
+        CACHE_PRIMARY_CHECK_MS: 5_000,
         AUTH_STORE: 'memory',
         JWT_ACCESS_TTL_S: 900,
         JWT_REFRESH_TTL_S: 2_592_000,
@@ -268,6 +276,58 @@ describe('parseEnv', () => {
       const env = parse({ IDEMPOTENCY_ENABLED: 'false', IDEMPOTENCY_STORE: 'redis' });
       assert.equal(env.IDEMPOTENCY_ENABLED, false);
       assert.equal(env.REDIS_URL, undefined);
+    });
+  });
+
+  describe('cache', () => {
+    it('requires REDIS_URL when the store is redis', () => {
+      assert.throws(() => parse({ CACHE_STORE: 'redis' }), /REDIS_URL/);
+    });
+
+    it('requires a store operation to time out well before the request handler', () => {
+      assert.throws(
+        () => parse({ CACHE_OP_TIMEOUT_MS: '30000' }),
+        /CACHE_OP_TIMEOUT_MS[\s\S]*REQUEST_HANDLER_TIMEOUT_MS/,
+      );
+    });
+
+    it('allows any store timeout when the request handler timeout is off', () => {
+      const env = parse({ CACHE_OP_TIMEOUT_MS: '30000', REQUEST_HANDLER_TIMEOUT_MS: '0' });
+      assert.equal(env.CACHE_OP_TIMEOUT_MS, 30_000);
+    });
+
+    it('caps the TTL at 30 days', () => {
+      assert.equal(parse({ CACHE_MAX_TTL_S: '2592000' }).CACHE_MAX_TTL_S, 2_592_000);
+      assert.throws(() => parse({ CACHE_MAX_TTL_S: '2592001' }), /CACHE_MAX_TTL_S/);
+    });
+
+    it('takes the outbox poll and primary check intervals, from 10 ms', () => {
+      const env = parse({ CACHE_OUTBOX_POLL_MS: '10', CACHE_PRIMARY_CHECK_MS: '60000' });
+      assert.equal(env.CACHE_OUTBOX_POLL_MS, 10);
+      assert.equal(env.CACHE_PRIMARY_CHECK_MS, 60_000);
+      for (const name of ['CACHE_OUTBOX_POLL_MS', 'CACHE_PRIMARY_CHECK_MS'])
+        assert.throws(() => parse({ [name]: '9' }), new RegExp(name));
+    });
+
+    it('keeps the memory layer off by default and parses it as a boolean', () => {
+      assert.equal(parse({}).CACHE_L1_ENABLED, false);
+      assert.equal(parse({ CACHE_L1_ENABLED: 'true' }).CACHE_L1_ENABLED, true);
+    });
+
+    it('rejects sizes and timeouts below 1', () => {
+      for (const name of ['CACHE_MEMORY_MAX_ENTRIES', 'CACHE_OP_TIMEOUT_MS', 'CACHE_MAX_TTL_S'])
+        assert.throws(() => parse({ [name]: '0' }), new RegExp(name));
+    });
+
+    it('keeps the redis checks when the cache is disabled, since invalidations still use the store', () => {
+      const disabled = { CACHE_ENABLED: 'false', CACHE_STORE: 'redis' };
+      assert.throws(() => parse(disabled), /REDIS_URL/);
+    });
+
+    it('skips the store timeout check when the cache is disabled', () => {
+      const env = parse({ CACHE_ENABLED: 'false', CACHE_OP_TIMEOUT_MS: '30000' });
+      assert.equal(env.CACHE_ENABLED, false);
+      assert.equal(env.CACHE_OP_TIMEOUT_MS, 30_000);
     });
   });
 

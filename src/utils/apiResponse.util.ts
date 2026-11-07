@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
-import { buildSuccessBody } from '#lib/http/successEnvelope';
+import { setRepresentationEtag } from '#lib/http/etag';
+import { buildSuccessRepresentation, withRequestId } from '#lib/http/successEnvelope';
 import { Paginator, type PaginationInput } from '#utils/paginator.util';
 import { getLogger } from '#lib/logger/index';
 
@@ -28,7 +29,9 @@ const alreadySent = (res: Response) => {
 const send = (res: Response, status: number, { headers, ...body }: SendOptions = {}) => {
   if (alreadySent(res)) return;
   if (headers) res.set(headers);
-  return res.status(status).json(buildSuccessBody(status, body));
+  const representation = buildSuccessRepresentation(status, body);
+  setRepresentationEtag(res.req, res, { status, ...representation });
+  return res.status(status).json(withRequestId(representation));
 };
 
 const ok = (res: Response, data?: unknown, options?: ResponseOptions) =>

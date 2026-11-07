@@ -171,6 +171,7 @@ It runs in two phases, and the phase an error comes from decides its status:
 - **A `ZodError` from inside the handler is a `500`, not a `400`.** Validating a database row or an upstream reply checks *your* data; if it fails, the client did nothing wrong. To reject a request for a business reason, throw a typed error (`BadRequestError`, `UnprocessableEntityError`) from the service.
 - **`response` is an allowlist.** It describes `data`. The parsed value is what gets sent, so fields the schema doesn't name (`passwordHash`) are stripped before they leave.
 - **The return value becomes `data` in the standard envelope**, `{ success, message, data, requestId }`, exactly what [`apiResponse`](../utils/apiResponse.util.ts) sends. Both build it with [`successEnvelope.ts`](http/successEnvelope.ts), so a client sees one success shape whichever way the handler responds. The `status` option picks the status code and the default message (`201` → `Created`, `202` → `Accepted`). `204` sends no body, and a handler that returns nothing gets `data: null`.
+- **A `200` GET or HEAD gets an ETag that can actually match**, set by [`etag.ts`](http/etag.ts) and shared with `apiResponse`. Express hashes every body it sends, but the envelope's `requestId` is new on each request, so that hash never repeats and no response could ever be a `304`. Our tag is a weak validator over `{ status, message, data, meta }` only: `requestId` identifies the request, not the resource, and a weak ETag promises the two responses mean the same thing, not that they are byte-identical. It is set before `res.json()`, so Express keeps it instead of computing its own, and Express's own `If-None-Match` check then answers `304` with no body. Other methods and statuses get no tag from us, and neither does a response whose `Cache-Control` has `no-store`: a client that may not keep it has nothing to revalidate.
 - **The handler can still respond itself**, for a redirect or `apiResponse.pagination(res, …)` (the handler receives `(input, req, res)`). `route()` sees the response is already sent and steps aside. **The `response` schema is then skipped**, so it no longer strips fields: shape the data before you send it.
 - **Built for JSON routes.** On a non-`/api` route a `400` renders the `error` view, which shows the message but not `details`.
 - **The schemas can be read back.** `getRouteContract(handler)` returns the frozen `{ body?, query?, params?, response?, status }` that a `route()` handler validates with, or `undefined` for any other function. The OpenAPI document is built from it, so what it documents is what is enforced.
@@ -203,12 +204,42 @@ Whoever creates a dependency builds its check and passes it to `createApp({ read
 
 ### `redis/`
 
-`createRedisClient(url, logger, { connectTimeoutMs })` in [`redis/index.ts`](redis/index.ts) returns a node-redis client, and `closeRedisClient(client)` shuts it down.
+`createRedisClient(url, logger, { connectTimeoutMs })` in [`redis/index.ts`](redis/index.ts) returns an [ioredis](https://github.com/redis/ioredis) client, the one Redis client in the app, and `closeRedisClient(client)` shuts it down.
 
-- **Startup never hangs.** node-redis keeps retrying a refused connection forever and its `connect()` promise never settles, so the function stops waiting after `connectTimeoutMs`, logs a warning, and returns the client while it keeps reconnecting in the background. Whoever uses it must handle a client that is not ready yet. The rate limiter does: see [`rateLimiter/`](../rateLimiter/README.md#when-the-store-fails).
-- **Commands fail fast while disconnected** (`disableOfflineQueue`). A request gets an error at once instead of waiting in a queue for a reconnect.
-- **RESP2, on purpose.** node-redis 6 defaults to RESP3, whose `HELLO` handshake Redis older than 6 rejects. Nothing here needs RESP3.
-- **`closeRedisClient` handles both states.** A ready client is closed after its in-flight commands finish. One that never connected, or is between reconnects, has nothing to flush and is destroyed at once, so shutdown never waits on a connection that is not there.
+- **Startup never hangs.** The client connects lazily and `connect()` is raced against `connectTimeoutMs`; past it, the function logs a warning and returns the client while `retryStrategy` keeps reconnecting in the background (every 100 ms more, up to 3 s). Whoever uses it must handle a client that is not ready yet. The rate limiter does: see [`rateLimiter/`](../rateLimiter/README.md#when-the-store-fails).
+- **Commands fail fast while disconnected** (`enableOfflineQueue: false`). A request gets an error at once instead of waiting in a queue for a reconnect.
+- **RESP2**, ioredis's protocol, so Redis older than 6 works too.
+- **ioredis stays on 5.x.** BentoCache 1.6.1 declares `ioredis@^5` as a peer and recognises a connection it is given with `instanceof`. With another major it would not, and would silently open its own client to `127.0.0.1:6379`. The test `stores entries in the Redis it was given` in [`cache/index.test.ts`](cache/index.test.ts) fails if that happens; upgrade both together.
+- **`execOrThrow(multi)`** runs a transaction and throws its first failed command. ioredis resolves `exec()` with an `[error, reply]` pair per command instead of rejecting, so without it a failed write in a `MULTI` would pass silently.
+- **`defineScript(source)`** runs a Lua script by its SHA-1 (`EVALSHA`) and sends the source once with `EVAL` when the server answers `NOSCRIPT`: on first use, and after a restart or a failover.
+- **`duplicateRedisClient(client, logger, { commandTimeoutMs, name, autoPipelining? })`** opens a second connection with the same settings plus a per-command timeout, for a feature whose slow commands must not queue behind, or ahead of, everyone else's. `autoPipelining` batches the commands sent in one tick into one write, for many small independent commands. The cache uses it, with auto-pipelining on. Its errors are logged with `connection: name`.
+- **`closeRedisClient` handles every state.** A ready client quits after its in-flight commands finish. One that never connected, or is between reconnects, is dropped at once, so shutdown never waits on a connection that is not there. An ended one is left alone.
+
+### `cache/`
+
+A typed, schema-checked layer over [BentoCache](https://bentocache.dev), pinned to an exact version in `package.json`, with its own invalidation. `initCache(env, logger, redis?, { outbox? })` in [`cache/index.ts`](cache/index.ts) builds the store from `CACHE_STORE` and `CACHE_L1_ENABLED`, starts the outbox relay and, on Redis, the primary guard, and returns `{ cache, readinessChecks, close }`; [`server.ts`](../server.ts) calls it, and [`app.ts`](../app.ts) registers `cache` and `cacheOutbox` in the container. What it guarantees, and how to use it, is in the root [README](../../README.md#server-side-cache).
+
+| File | Role |
+|------|------|
+| [`spec.ts`](cache/spec.ts) | `defineCacheSpec`: a name, a plain-JSON schema (hashed into every key), timing, tag builders and `clusterLockMs`. `encodeParts`: keys and tags as JSON arrays. Pure: no store, so any module may import a spec |
+| [`client.ts`](cache/client.ts) | `createCache(…)`: `cache.entity(spec)` and `cache.invalidate`. Builds each key from the tags' versions, checks the schema on the way in and out, takes the key lock, counts `cache.lookups`. An entity works out its BentoCache timing once, when bound |
+| [`versions.ts`](cache/versions.ts) | `TagVersions`: a token per tag, and `bump`. In memory, or on Redis with one script call that reads every token of a key and the epoch |
+| [`primary.ts`](cache/primary.ts) | `PrimaryGuard`: ties the cache epoch to the `run_id` of the Redis server, and keeps the cache unused until it has checked the server this connection talks to |
+| [`lock.ts`](cache/lock.ts) | `KeyLock`: `SET NX PX` per key, released by a script only by its own token |
+| [`outbox.ts`](cache/outbox.ts) | `CacheOutboxStore` (the port a database store implements), the memory outbox, and the relay that delivers it |
+| [`errors.ts`](cache/errors.ts) | `CacheConfigError`: a spec, key, tag or option that can never work. `CacheLoadTimeoutError`: a loader past `hardTimeoutMs` |
+| [`index.ts`](cache/index.ts) | `initCache` and the public exports |
+
+- **Stores.** `memory`: one BentoCache memory layer of `CACHE_MEMORY_MAX_ENTRIES` entries, and the tag versions in a map of as many. `redis`: Redis through a connection of its own (`duplicateRedisClient`, with `CACHE_OP_TIMEOUT_MS` as its command timeout and auto-pipelining), shared by the values, the tag versions, the guard and the key lock; with `CACHE_L1_ENABLED`, a memory layer in front and BentoCache's Redis bus, on a publisher and a subscriber of its own. The bus connections queue commands while disconnected, unlike every other connection: BentoCache sends its `SUBSCRIBE` without awaiting it, so one that failed fast would be an unhandled rejection.
+- **Where it departs from plain BentoCache, and why.**
+  - *Versioned tags, not BentoCache's tags.* BentoCache marks an invalidation with the time it happened and an entry with the time it was written. Comparing the two needs every instance's clock to agree and no pause between a load's check and its write, and neither is guaranteed. A key built from the tags' tokens needs neither: invalidating moves the key. It also makes a hit two round trips however many tags it has, where BentoCache reads an entry's tags one after another, and keeps a memory layer right without the bus.
+  - *Errors.* A loader's error comes back unchanged, not wrapped in `E_FACTORY_ERROR`; a load past `hardTimeoutMs` becomes `CacheLoadTimeoutError`, which the [cache converter](../errors/converter/cache.converter.ts) answers with a 503; any other failure on a read is logged, counted as `error`, and the loader runs.
+  - *A lock across instances.* BentoCache's lock holds within one process. `clusterLockMs` adds one in Redis, taken inside the loader, so it costs nothing on a hit.
+  - *No circuit breaker.* Commands already fail at once while disconnected, and a slow one is cut by its timeout; the breaker would instead skip writes silently.
+- **Keys.** Values: `<SERVICE_NAME>:cache:<entity>:<schema hash>:<encoded key>:<tokens hash>`. Under `<SERVICE_NAME>:cache-v:`, the `epoch`, `tag:<tag>` for each token and `lock:<value key>`. Tags are `["user","one","u1"]`; an entity's `all` tag is `["user"]`, and every key includes it.
+- **The scripts take their random values from the client.** Redis replicates a script by its effects since 5.0, but making none inside it keeps it valid under any replication mode.
+- **`enabled: false` turns off reads and writes only.** The store is still built and invalidations still reach it. `CACHE_STORE=redis` with no client throws, enabled or not.
+- **`close`** stops the relay after a last delivery, stops the guard, disconnects BentoCache and drops the cache's own connection. The shared client belongs to `server.ts`, which closes it last.
 
 ### `telemetry/`
 

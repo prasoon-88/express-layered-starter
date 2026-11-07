@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import type { CachePolicy } from './cachePolicy.ts';
 import type { Access, Key, Providers, Registry } from './registry.ts';
 
 export const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
@@ -11,6 +12,8 @@ export type RouteDef = Readonly<{
   method: RouteMethod;
   path: string;
   access: Access;
+  /** Optional. A GET without one gets `DEFAULT_GET_CACHE_POLICY`; any other method allows only no-store. */
+  cache?: CachePolicy;
   /** Runs before the access check, such as a rate limit that must also count rejected callers. */
   pre: readonly RequestHandler[];
   /** Runs after the access check. The last one is the controller. */
@@ -39,6 +42,7 @@ export const defineRoute = (route: {
   method: RouteMethod;
   path: string;
   access: Access;
+  cache?: CachePolicy;
   pre?: readonly RequestHandler[];
   handlers: Handlers;
 }): RouteDef =>
@@ -47,6 +51,7 @@ export const defineRoute = (route: {
     method: route.method,
     path: route.path,
     access: route.access,
+    ...(route.cache && { cache: Object.freeze({ ...route.cache }) }),
     pre: Object.freeze([...(route.pre ?? [])]),
     handlers: route.handlers,
   });

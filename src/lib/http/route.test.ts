@@ -1,7 +1,10 @@
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { NextFunction, Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
+import type { Server } from 'node:http';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
+import { listen, revalidate } from '#testing/http';
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'test';
 
@@ -10,6 +13,7 @@ const { apiResponse } = await import('#utils/apiResponse.util');
 const { requestContext } = await import('#contexts/requestContext');
 
 class FakeResponse {
+  req = {};
   headersSent = false;
   statusCode = 0;
   sends = 0;
@@ -117,6 +121,62 @@ describe('route() success response', () => {
 
     assert.equal(res.sends, 1);
     assert.deepEqual((res.body as { data: unknown }).data, { sentBy: 'handler' });
+  });
+});
+
+describe('route() ETag', () => {
+  let server: Server;
+  let baseUrl = '';
+
+  before(async () => {
+    const app = express();
+    app.use((_req, _res, next) => requestContext.run({ requestId: randomUUID() }, next));
+    app.get(
+      '/thing',
+      route({}, () => ({ id: 1 })),
+    );
+    app.get(
+      '/secret',
+      (_req, res, next) => {
+        res.set('Cache-Control', 'no-store');
+        next();
+      },
+      route({}, () => ({ id: 1 })),
+    );
+    ({ server, baseUrl } = await listen(app));
+  });
+
+  after(() => {
+    server.close();
+  });
+
+  const get = (path: string) => fetch(`${baseUrl}${path}`);
+
+  it('gives two requests for the same data the same ETag, though their requestIds differ', async () => {
+    const first = await get('/thing');
+    const second = await get('/thing');
+    const bodies = [await first.json(), await second.json()] as { requestId: string }[];
+
+    assert.ok(first.headers.get('ETag'));
+    assert.equal(first.headers.get('ETag'), second.headers.get('ETag'));
+    assert.notEqual(bodies[0]?.requestId, bodies[1]?.requestId);
+  });
+
+  it('answers a matching If-None-Match with 304, an empty body and the same ETag', async () => {
+    const etag = (await get('/thing')).headers.get('ETag') ?? '';
+
+    const revalidated = await revalidate(`${baseUrl}/thing`, etag);
+
+    assert.equal(revalidated.status, 304);
+    assert.equal(await revalidated.text(), '');
+    assert.equal(revalidated.headers.get('ETag'), etag);
+  });
+
+  it('sets no stable ETag on a no-store route, so a revalidation never matches', async () => {
+    const first = await get('/secret');
+    const second = await get('/secret');
+
+    assert.notEqual(first.headers.get('ETag'), second.headers.get('ETag'));
   });
 });
 

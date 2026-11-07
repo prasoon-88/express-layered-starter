@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import { ExpressInstrumentation, ExpressLayerType } from '@opentelemetry/instrumentation-express';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { PinoInstrumentation } from '@opentelemetry/instrumentation-pino';
-import { RedisInstrumentation } from '@opentelemetry/instrumentation-redis';
+import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import { startNodeSdk } from '@opentelemetry/sdk-node';
 import { telemetryConfig } from '#config/telemetry.config';
@@ -47,10 +47,10 @@ export const startTelemetry = () => {
         // HTTP span, and the Redis calls made there as its children.
         ignoreLayersType: [ExpressLayerType.MIDDLEWARE, ExpressLayerType.ROUTER],
       }),
-      new RedisInstrumentation({
+      new IORedisInstrumentation({
         // The default records arguments: Lua script values (idempotency bodies, token data)
-        // and keys (client IPs, token ids). The command name is all a trace needs.
-        dbStatementSerializer: (command) => command,
+        // and keys (client IPs, token ids, cache keys). The command name is all a trace needs.
+        dbStatementSerializer: (command) => command.toUpperCase(),
         // Background commands (policy refresh, the connection check) would each be a trace.
         requireParentSpan: true,
       }),

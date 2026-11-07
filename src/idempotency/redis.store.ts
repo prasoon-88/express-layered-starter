@@ -41,21 +41,13 @@ export const createRedisStore = (redis: Redis): IdempotencyStore => {
     record: InProgressRecord,
     lockTtlMs: number,
   ): Promise<AcquireResult> =>
-    readRecord(
-      await redis.eval(ACQUIRE, {
-        keys: [key],
-        arguments: [JSON.stringify(record), String(lockTtlMs)],
-      }),
-    );
+    readRecord(await redis.eval(ACQUIRE, 1, key, JSON.stringify(record), String(lockTtlMs)));
 
   const complete = async (key: string, token: string, record: CompletedRecord, ttlMs: number) =>
-    (await redis.eval(COMPLETE, {
-      keys: [key],
-      arguments: [token, JSON.stringify(record), String(ttlMs)],
-    })) === 1;
+    (await redis.eval(COMPLETE, 1, key, token, JSON.stringify(record), String(ttlMs))) === 1;
 
   const release = async (key: string, token: string) => {
-    await redis.eval(RELEASE, { keys: [key], arguments: [token] });
+    await redis.eval(RELEASE, 1, key, token);
   };
 
   const ping = () => redis.ping();

@@ -2,7 +2,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Server } from 'node:http';
 import express from 'express';
-import { listen, postJson, waitFor } from './http.ts';
+import { listen, postJson, revalidate, waitFor } from './http.ts';
 
 describe('listen and postJson', () => {
   let server: Server;
@@ -51,6 +51,29 @@ describe('listen and postJson', () => {
 
   it('rejects instead of hanging when the server cannot listen', async () => {
     await assert.rejects(listen(server), { code: 'ERR_SERVER_ALREADY_LISTEN' });
+  });
+});
+
+describe('revalidate', () => {
+  let server: Server;
+  let baseUrl = '';
+
+  before(async () => {
+    const app = express();
+    app.get('/doc', (_req, res) => {
+      res.json({ a: 1 });
+    });
+    ({ server, baseUrl } = await listen(app));
+  });
+
+  after(() => {
+    server.close();
+  });
+
+  it('gets a 304 for the ETag the server last sent', async () => {
+    const etag = (await fetch(`${baseUrl}/doc`)).headers.get('ETag') ?? '';
+
+    assert.equal((await revalidate(`${baseUrl}/doc`, etag)).status, 304);
   });
 });
 

@@ -43,7 +43,6 @@ export const createRateLimitEngine = (deps: RateLimiterEngineDeps) => {
       ...base,
       keyPrefix: concatenateStrings([prefix, name, 'redis'], ':'),
       storeClient: redis,
-      useRedisPackage: true,
       rejectIfRedisNotReady: true,
       inMemoryBlockOnConsumed: p.points + 1,
       inMemoryBlockDuration: p.blockDurationS ?? p.durationS,

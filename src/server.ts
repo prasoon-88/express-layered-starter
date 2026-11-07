@@ -1,6 +1,7 @@
 import { createApp } from './app.ts';
 import { initRateLimit } from '#rateLimiter';
 import { initIdempotency } from '#idempotency';
+import { createMemoryCacheOutbox, initCache } from '#lib/cache/index';
 import { getLogger } from '#lib/logger/index';
 import { ENV_CONSTANTS } from '#constants/env/index';
 import { createHttpServer } from '#lib/http/createHttpServer';
@@ -22,7 +23,8 @@ const authUsesRedis = ENV_CONSTANTS.AUTH_STORE === 'redis';
 const sharesRedis =
   authUsesRedis ||
   (ENV_CONSTANTS.RATE_LIMIT_ENABLED && ENV_CONSTANTS.RATE_LIMIT_STORE === 'redis') ||
-  (ENV_CONSTANTS.IDEMPOTENCY_ENABLED && ENV_CONSTANTS.IDEMPOTENCY_STORE === 'redis');
+  (ENV_CONSTANTS.IDEMPOTENCY_ENABLED && ENV_CONSTANTS.IDEMPOTENCY_STORE === 'redis') ||
+  ENV_CONSTANTS.CACHE_STORE === 'redis';
 
 const redis =
   sharesRedis && ENV_CONSTANTS.REDIS_URL
@@ -33,6 +35,10 @@ const redis =
 
 export const rateLimiter = await initRateLimit(ENV_CONSTANTS, logger, redis);
 export const idempotency = await initIdempotency(ENV_CONSTANTS, logger, redis);
+// In memory, as the repositories are: a database branch passes its own store, written in the
+// same transaction as the data (see lib/cache/outbox.ts).
+const cacheOutbox = createMemoryCacheOutbox();
+const cache = initCache(ENV_CONSTANTS, logger, redis, { outbox: cacheOutbox });
 
 if (!authUsesRedis && ENV_CONSTANTS.NODE_ENV === 'production')
   logger.warn(
@@ -48,10 +54,13 @@ const { app } = createApp({
   env: ENV_CONSTANTS,
   rl: rateLimiter,
   idempotency,
+  cache: cache.cache,
+  cacheOutbox,
   redis,
   readinessChecks: [
     ...rateLimiter.readinessChecks,
     ...idempotency.readinessChecks,
+    ...cache.readinessChecks,
     ...authReadiness,
   ],
 });
@@ -67,6 +76,7 @@ registerProcessHandler({
   hooks: [
     () => rateLimiter.close(),
     () => idempotency.close(),
+    () => cache.close(),
     async () => {
       if (redis) await closeRedisClient(redis);
     },

@@ -16,8 +16,10 @@ const ALLOW = {
   utils: ['config', 'constants', 'contexts', 'errors', 'lib'],
   models: ['constants'],
   schemas: ['constants'],
-  repository: ['models', 'utils', 'lib', 'errors', 'config', 'constants'],
-  services: ['repository', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
+  // Cache specs: pure descriptions (defineCacheSpec), so any data layer may import them.
+  cache: ['models', 'lib', 'constants'],
+  repository: ['cache', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
+  services: ['cache', 'repository', 'models', 'utils', 'lib', 'errors', 'config', 'constants'],
   controllers: ['services', 'utils', 'errors', 'lib', 'config', 'constants', 'schemas'],
   // Route files receive controllers and middleware as arguments (see src/http/README.md).
   routes: ['http', 'middlewares', 'constants', 'config'],
@@ -31,6 +33,7 @@ const ALLOW = {
     'controllers',
     'services',
     'repository',
+    'cache',
     'models',
     'middlewares',
     'lib',
@@ -46,6 +49,10 @@ const ALLOW = {
 };
 
 const LAYERS = Object.keys(ALLOW);
+
+// Utils that import nothing internal, so any layer may use them (src/README.md, "leaf utils").
+const LEAF_UTILS = ['concatenateStrings', 'sleep'];
+const LEAF_UTIL_IMPORT = `#utils/(${LEAF_UTILS.join('|')})\\.util$`;
 
 // Ban parent-relative traversal everywhere — cross-folder imports must use `#aliases`.
 const noParentRelative = {
@@ -65,9 +72,27 @@ const aliasPatterns = (layer) => {
   const denied = LAYERS.filter((l) => l !== layer && !ALLOW[layer].includes(l));
   const allowed = ALLOW[layer].length ? ALLOW[layer].join(', ') : 'nothing internal';
   return {
-    regex: `^#(${denied.join('|')})(/|$)`,
-    message: `Layer "${layer}/" may only import: ${allowed} (layered architecture, src/README.md).`,
+    regex: `^(?!${LEAF_UTIL_IMPORT})#(${denied.join('|')})(/|$)`,
+    message: `Layer "${layer}/" may only import: ${allowed}, and the leaf utils (layered architecture, src/README.md).`,
   };
+};
+
+const leafUtilConfig = {
+  files: LEAF_UTILS.map((name) => `src/utils/${name}.util.ts`),
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            regex: '^(#|\\.)',
+            message:
+              'A leaf util imports nothing internal, so every layer may use it (src/README.md).',
+          },
+        ],
+      },
+    ],
+  },
 };
 
 // Both static `import` and `await import()`, for each restricted source.
@@ -145,7 +170,7 @@ export default defineConfig([
   // node:test's describe/it return promises, but the runner awaits them itself.
   // This allow-list is typescript-eslint's documented setting for node:test; other promises stay checked.
   {
-    files: ['**/*.test.ts'],
+    files: ['**/*.test.ts', 'src/testing/**/*.ts'],
     rules: {
       '@typescript-eslint/no-floating-promises': [
         'error',
@@ -174,6 +199,7 @@ export default defineConfig([
 
   // Per-layer dependency direction (these override the rule above for their folder).
   ...layerConfigs,
+  leafUtilConfig,
 
   // Test helpers are not built into dist/, so production code importing one would crash at boot.
   // The OpenTelemetry SDK is started by the preload only; app code uses @opentelemetry/api,

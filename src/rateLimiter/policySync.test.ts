@@ -24,7 +24,7 @@ describe('startPolicySync', () => {
       let reads = 0;
       const stop = startPolicySync({
         redis: {
-          hGetAll: () => {
+          hgetall: () => {
             reads++;
             return Promise.resolve({});
           },
@@ -55,7 +55,7 @@ describe('startPolicySync', () => {
     const policies = registry();
     const stop = startPolicySync({
       redis: {
-        hGetAll: () =>
+        hgetall: () =>
           Promise.resolve({
             global: JSON.stringify({ points: 5, durationS: 10 }),
             auth: JSON.stringify({ points: 0, durationS: 10 }),

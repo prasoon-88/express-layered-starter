@@ -1,7 +1,5 @@
 import type { Registry } from '#http/registry';
 import { defineGroup, defineRoute } from '#http/routes';
-import { noStoreMiddleware } from '#middlewares/noStore.middleware';
-
 type UserRoutesDeps = Pick<Registry, 'userController' | 'limit' | 'idempotent'>;
 
 export const userRoutes = ({ userController, limit, idempotent }: UserRoutesDeps) =>
@@ -17,8 +15,7 @@ export const userRoutes = ({ userController, limit, idempotent }: UserRoutesDeps
       method: 'get',
       path: '/me',
       access: { strategy: 'authenticated' },
-      // In `pre`, so the 401 from the access check is not cached either.
-      pre: [noStoreMiddleware],
+      cache: { mode: 'no-store' },
       handlers: [userController.me],
     }),
   ]);

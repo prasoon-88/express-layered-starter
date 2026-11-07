@@ -141,8 +141,8 @@ describe('refreshTokenRepository (redis)', { skip: redisSkip }, () => {
     await repo.create(token('t1', 'fa', 30_000), Date.now());
     await repo.revokeFamily('fa', 1);
 
-    const tokenTtl = await redis.pTTL(`${prefix}:rt:t1`);
-    const familyTtl = await redis.pTTL(`${prefix}:rtf:fa`);
+    const tokenTtl = await redis.pttl(`${prefix}:rt:t1`);
+    const familyTtl = await redis.pttl(`${prefix}:rtf:fa`);
     assert.ok(tokenTtl > 0 && tokenTtl <= 30_000, `token ttl ${tokenTtl}`);
     assert.ok(familyTtl > 0 && familyTtl <= FAMILY_TTL_MS, `family ttl ${familyTtl}`);
   });

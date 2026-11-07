@@ -10,6 +10,8 @@ export const docsRoutes = ({ docsController }: Pick<Registry, 'docsController'>)
         strategy: 'public',
         reason: 'Describes the API for clients and tooling; holds no user data',
       },
+      // The document only changes on deploy.
+      cache: { mode: 'fresh', maxAgeS: 300 },
       handlers: [docsController.openApi],
     }),
   ]);

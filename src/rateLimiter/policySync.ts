@@ -5,7 +5,7 @@ import { policySchema, type Policy } from './types.ts';
 import { MS_PER_SECOND } from '#constants/time.constant';
 
 type StartPolicySyncConfig = {
-  redis: Pick<Redis, 'hGetAll'>;
+  redis: Pick<Redis, 'hgetall'>;
   hasKey: string;
   registry: PolicyRegistry;
   intervalS: number;
@@ -17,7 +17,7 @@ type StartPolicySync = (o: StartPolicySyncConfig) => () => void;
 export const startPolicySync: StartPolicySync = (o) => {
   const sync = async () => {
     try {
-      const raw = await o.redis.hGetAll(o.hasKey);
+      const raw = await o.redis.hgetall(o.hasKey);
       const next: Record<string, Policy> = {};
       for (const [name, json] of Object.entries(raw)) {
         if (!o.registry.has(name as PolicyName)) {

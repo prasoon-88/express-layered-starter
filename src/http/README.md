@@ -7,6 +7,7 @@
 - The registry: the type of every key the container can provide, and every access strategy ([`registry.ts`](registry.ts))
 - The definitions: `defineRoute`, `defineGroup`, `defineModule` ([`routes.ts`](routes.ts))
 - The access strategies: `public`, `authenticated`, `roles` ([`strategies.ts`](strategies.ts))
+- The cache rules and the `Cache-Control` they produce ([`cachePolicy.ts`](cachePolicy.ts))
 - The path rules and the unreachable-route check ([`paths.ts`](paths.ts))
 - The mounter, which checks the whole tree and builds the router ([`mount.ts`](mount.ts))
 
@@ -55,6 +56,13 @@ export const userRoutes = ({ userController, limit, idempotent }: UserRoutesDeps
       access: { strategy: 'public', reason: 'Account signup: the caller has no credentials yet' },
       handlers: [limit('auth'), idempotent('default'), userController.register],
     }),
+    defineRoute({
+      method: 'get',
+      path: '/me',
+      access: { strategy: 'authenticated' },
+      cache: { mode: 'no-store' },
+      handlers: [userController.me],
+    }),
   ]);
 ```
 
@@ -63,9 +71,10 @@ A route runs its middleware in this order:
 | Step | From | Typical use |
 |------|------|-------------|
 | 1 | each enclosing group's `use`, outermost first | body parsing, the global limit |
-| 2 | the route's `pre` | a rate limit that must also count rejected callers |
-| 3 | the middleware its `access` strategy returns | `authenticate`, then `authorize(roles)` |
-| 4 | the route's `handlers`, in order; the last one is the controller | per-route limit, idempotency, the controller |
+| 2 | the route's `cache` rule, set by `mount` | `Cache-Control`, and `Vary: Authorization` when the route needs credentials |
+| 3 | the route's `pre` | a rate limit that must also count rejected callers |
+| 4 | the middleware its `access` strategy returns | `authenticate`, then `authorize(roles)` |
+| 5 | the route's `handlers`, in order; the last one is the controller | per-route limit, idempotency, the controller |
 
 To change the order, move an entry within `pre` or `handlers`, or move it between the two. Any `RequestHandler` works in either array, so a new middleware never needs a change here.
 
@@ -89,6 +98,21 @@ Groups have no access default on purpose. If they had one, moving a route into a
 defineRoute({ method: 'get', path: '/me', access: { strategy: 'authenticated' }, handlers: [userController.me] })
 defineRoute({ method: 'delete', path: '/:id', access: { strategy: 'roles', roles: ['ADMIN'] }, handlers: [userController.remove] })
 ```
+
+## Cache rules
+
+Every route's `Cache-Control` comes from its `cache` rule ([`cachePolicy.ts`](cachePolicy.ts)). `mount` computes the header once at boot and sets it before `pre` and the access check, so a rejected caller gets it too. The error handler replaces it with `no-store` on every error, so a 401, 404 or 429 is never kept with the route's `max-age`.
+
+| Rule | `Cache-Control` | Use for |
+|------|-----------------|---------|
+| none, on a GET | `private, no-cache` (`DEFAULT_GET_CACHE_POLICY`) | anything: only the browser keeps it, and it revalidates every time |
+| none, on another method | not set | writes |
+| `{ mode: 'no-store' }` | `no-store` | health probes, personal data, token responses |
+| `{ mode: 'revalidate' }` | `public, no-cache` on a `public` route, else `private, no-cache` | public data that changes at any moment |
+| `{ mode: 'fresh', maxAgeS: 300 }` | `public, max-age=300` on a `public` route, else `private, …` | public data that changes rarely, such as the OpenAPI document |
+| `{ mode: 'fresh', maxAgeS: 60, staleWhileRevalidateS: 30 }` | `public, max-age=60, stale-while-revalidate=30` on a `public` route, else `private, …` | the same, served stale while it refreshes |
+
+`shared` decides `public` or `private`. It defaults to `true` on a `public` route and `false` on any other, and a route that needs credentials also gets `Vary: Authorization` whenever its rule sets a `Cache-Control`. `shared` must be a boolean, and `shared: true` on such a route stops the boot: a CDN would serve one user's response to another. Any method other than GET may only declare `no-store`. The applied rule is listed as `cache` in the route table.
 
 ## A module
 
@@ -143,6 +167,9 @@ Every check runs once, inside `mount()`. Nothing is checked per request. Each er
 | `public` without a reason | `a public route needs a reason` |
 | `roles` that is empty, or names an unknown role | `needs at least one role` / `unknown role "ROOT"` |
 | A strategy needs a key nobody registered | `GET /me: No provider for "authenticate"` |
+| `shared: true` on a route that needs credentials | `GET /me: a route that needs credentials cannot be stored by shared caches (shared: true)` |
+| A cache rule other than `no-store` on a non-GET | `POST /x: a POST route can declare only no-store` |
+| `maxAgeS` outside 1 to 31536000, `staleWhileRevalidateS` below 0, or either not whole | `maxAgeS must be a whole number from 1 to 31536000` |
 | Method outside `get`, `post`, `put`, `patch`, `delete` | `method "trace" must be one of …` |
 | A path that is not canonical, or uses syntax the checker can't compare | `path segment "*rest" is not allowed` |
 | The same param name twice, across a prefix and a path | `uses the param ":id" twice` |
@@ -186,19 +213,19 @@ A group's `use` runs for every request whose path starts with the prefix, includ
 
 ## Testing
 
-- [`container.test.ts`](container.test.ts), [`paths.test.ts`](paths.test.ts) and [`mount.test.ts`](mount.test.ts) cover every rule above, against a real Express server.
+- [`container.test.ts`](container.test.ts), [`paths.test.ts`](paths.test.ts), [`cachePolicy.test.ts`](cachePolicy.test.ts) and [`mount.test.ts`](mount.test.ts) cover every rule above, against a real Express server.
 - A module can be mounted alone with a fresh container and fakes for only the keys it needs.
-- `createApp` returns `{ app, routes }`. `routes` lists every route's method, full path, access rule, module and `controller` (its last handler, whose [`route()`](../lib/http/route.ts) schemas the OpenAPI document reads), and is what the public-route test reads.
+- `createApp` returns `{ app, routes }`. `routes` lists every route's method, full path, access rule, applied cache rule, module and `controller` (its last handler, whose [`route()`](../lib/http/route.ts) schemas the OpenAPI document reads), and is what the public-route test reads.
 
 ## Dependency rules
 
 ```
-constants/   ← the only layer http/ imports (USER_ROLES)
-   ↑
+constants/   ← the only layer http/ imports (USER_ROLES, HTTP_HEADERS), plus the leaf utils
+   ↑            such as concatenateStrings, which import nothing
 http/        ← imported by routes/ (definitions, Registry type), modules/, and app.ts
 ```
 
-Enforced by `http: ['constants']` in [`eslint.config.js`](../../eslint.config.js). Inside this folder, siblings are imported relatively.
+Enforced by `http: ['constants']` and `LEAF_UTILS` in [`eslint.config.js`](../../eslint.config.js). Inside this folder, siblings are imported relatively.
 
 ## The test
 > Does it decide how routes are assembled, checked or supplied with dependencies, for any feature? → it belongs here.

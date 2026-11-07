@@ -26,6 +26,13 @@ export const postJson = (url: string, body: unknown, headers: Record<string, str
   });
 
 /**
+ * A conditional GET. fetch adds `Cache-Control: no-cache` to any request carrying If-None-Match,
+ * which makes the server ignore the validator, so this sends `max-age=0` as a browser does.
+ */
+export const revalidate = (url: string, etag: string) =>
+  fetch(url, { headers: { 'If-None-Match': etag, 'Cache-Control': 'max-age=0' } });
+
+/**
  * Polls `read` until it returns something other than `undefined`. A throw counts as not yet; if
  * time runs out, the last one is the timeout's cause.
  */

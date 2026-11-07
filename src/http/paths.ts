@@ -1,3 +1,5 @@
+import { concatenateStrings } from '#utils/concatenateStrings.util';
+
 // Paths are limited to static segments and whole-segment params. That subset is what the
 // unreachable-route check can compare exactly; wildcards and optional groups would need a full
 // model of Express's matcher, so they are refused instead of guessed at.
@@ -25,7 +27,7 @@ export const pathProblem = (path: unknown): string | undefined => {
 
 export const joinPaths = (base: string, path: string) => {
   const joined = [...segmentsOf(base || '/'), ...segmentsOf(path)];
-  return joined.length ? `/${joined.join('/')}` : '/';
+  return joined.length ? `/${concatenateStrings(joined, '/')}` : '/';
 };
 
 export const duplicateParam = (path: string) => {

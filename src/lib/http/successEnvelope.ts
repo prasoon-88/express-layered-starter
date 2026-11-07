@@ -18,7 +18,8 @@ export type SuccessBodyInput = {
   meta?: Record<string, unknown>;
 };
 
-export const buildSuccessBody = (
+/** The body without `requestId`: what the resource is, and so what its ETag is computed from. */
+export const buildSuccessRepresentation = (
   status: number,
   { message, data = null, meta }: SuccessBodyInput = {},
 ) => ({
@@ -26,5 +27,9 @@ export const buildSuccessBody = (
   message: message ?? MESSAGE_BY_STATUS[status] ?? DEFAULT_MESSAGE,
   data,
   ...(meta && { meta }),
+});
+
+export const withRequestId = (representation: ReturnType<typeof buildSuccessRepresentation>) => ({
+  ...representation,
   requestId: requestContext.getRequestId(),
 });

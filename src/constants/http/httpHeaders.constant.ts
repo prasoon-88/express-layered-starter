@@ -3,6 +3,7 @@ export const HTTP_HEADERS = Object.freeze({
   CACHE_CONTROL: 'Cache-Control',
   CONNECTION: 'Connection',
   DATE: 'Date',
+  VARY: 'Vary',
   VIA: 'Via',
 
   // Request
@@ -73,6 +74,16 @@ export const CONTENT_TYPES = Object.freeze({
   MULTIPART_FORM_DATA: 'multipart/form-data',
   PDF: 'application/pdf',
   OCTET_STREAM: 'application/octet-stream',
+});
+
+/** `Cache-Control` directives. One that takes seconds is written `max-age=60`. */
+export const CACHE_CONTROL = Object.freeze({
+  NO_STORE: 'no-store',
+  NO_CACHE: 'no-cache',
+  PUBLIC: 'public',
+  PRIVATE: 'private',
+  MAX_AGE: 'max-age',
+  STALE_WHILE_REVALIDATE: 'stale-while-revalidate',
 });
 
 export const CORS_DEFAULT_HEADERS = [

@@ -17,6 +17,7 @@ services:
       AUTH_STORE: redis
       RATE_LIMIT_STORE: redis
       IDEMPOTENCY_STORE: redis
+      CACHE_STORE: redis
       # Published straight to the host, no proxy in front, so there is nothing to trust.
       TRUST_PROXY: 'false'
       # Empty by default, which leaves OpenTelemetry off. To send traces to the Jaeger below:

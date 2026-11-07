@@ -1,5 +1,5 @@
 import { ServiceUnavailableError } from '#errors';
-import type { Redis } from '#lib/redis/index';
+import { execOrThrow, type Redis } from '#lib/redis/index';
 import { concatenateStrings } from '#utils/concatenateStrings.util';
 import type {
   NewRefreshToken,
@@ -49,22 +49,23 @@ export const createRedisRefreshTokenRepository = ({
     guard(async () => {
       const key = tokenKey(data.id);
       // One transaction, so a token is never stored without its expiry.
-      await redis
-        .multi()
-        .hSet(key, {
-          userId: data.userId,
-          familyId: data.familyId,
-          sessionVersion: String(data.sessionVersion),
-          hash: data.hash,
-          expiresAt: String(data.expiresAt),
-        })
-        .pExpireAt(key, data.expiresAt)
-        .exec();
+      await execOrThrow(
+        redis
+          .multi()
+          .hset(key, {
+            userId: data.userId,
+            familyId: data.familyId,
+            sessionVersion: String(data.sessionVersion),
+            hash: data.hash,
+            expiresAt: String(data.expiresAt),
+          })
+          .pexpireat(key, data.expiresAt),
+      );
     });
 
   const findById = (id: string) =>
     guard(async (): Promise<StoredRefreshToken | undefined> => {
-      const row = await redis.hGetAll(tokenKey(id));
+      const row = await redis.hgetall(tokenKey(id));
       if (!row.userId || !row.familyId || !row.sessionVersion || !row.hash || !row.expiresAt)
         return undefined;
 
@@ -82,17 +83,11 @@ export const createRedisRefreshTokenRepository = ({
     });
 
   const markUsed = (id: string, now: number) =>
-    guard(
-      async () =>
-        (await redis.eval(MARK_USED, { keys: [tokenKey(id)], arguments: [String(now)] })) === 1,
-    );
+    guard(async () => (await redis.eval(MARK_USED, 1, tokenKey(id), String(now))) === 1);
 
   const revokeFamily = (familyId: string, now: number) =>
     guard(async () => {
-      await redis.set(familyKey(familyId), String(now), {
-        condition: 'NX',
-        expiration: { type: 'PX', value: familyTtlMs },
-      });
+      await redis.set(familyKey(familyId), String(now), 'PX', familyTtlMs, 'NX');
     });
 
   return { create, findById, markUsed, revokeFamily };

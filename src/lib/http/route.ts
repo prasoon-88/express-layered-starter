@@ -2,7 +2,8 @@ import type { Request, Response, RequestHandler } from 'express';
 import { ZodError, ZodRealError } from 'zod';
 import type { z, ZodType } from 'zod';
 import { HTTP_STATUS } from '#constants/http/httpStatus.constant';
-import { buildSuccessBody } from './successEnvelope.ts';
+import { setRepresentationEtag } from './etag.ts';
+import { buildSuccessRepresentation, withRequestId } from './successEnvelope.ts';
 
 type Schemas = {
   body?: ZodType;
@@ -80,7 +81,9 @@ export function route<S extends Schemas>(
         res.status(status).end(); // a 204 has no body, so there is no envelope to send
         return;
       }
-      res.status(status).json(buildSuccessBody(status, { data: out }));
+      const representation = buildSuccessRepresentation(status, { data: out });
+      setRepresentationEtag(req, res, { status, ...representation });
+      res.status(status).json(withRequestId(representation));
     } catch (err) {
       next(
         err instanceof ZodError

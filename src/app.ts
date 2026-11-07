@@ -13,6 +13,7 @@ import type { Env } from '#constants/env/schema';
 import type { RateLimiter } from '#rateLimiter';
 import type { Idempotency } from '#idempotency';
 import type { Redis } from '#lib/redis/index';
+import type { Cache, MemoryCacheOutbox } from '#lib/cache/index';
 import { createContainer } from '#http/container';
 import { mount } from '#http/mount';
 import { defineGroup } from '#http/routes';
@@ -27,6 +28,9 @@ declare module '#http/registry' {
     limit: Awaited<RateLimiter>['limit'];
     idempotent: Awaited<Idempotency>['idempotent'];
     readinessChecks: readonly ReadinessCheck[];
+    cache: Cache;
+    /** Where a repository records, with a write, the cache tags it changed. Registered when given. */
+    cacheOutbox: MemoryCacheOutbox;
     /** Registered only when server.ts opened a connection. */
     redis: Redis;
   }
@@ -36,19 +40,32 @@ export type AppConfig = {
   env: Env;
   rl: Pick<Awaited<RateLimiter>, 'limit'>;
   idempotency: Pick<Awaited<Idempotency>, 'idempotent'>;
+  cache: Cache;
+  /** The outbox initCache delivers from, for repositories to record invalidations in. */
+  cacheOutbox?: MemoryCacheOutbox;
   /** Dependencies `/health/ready` probes. Whoever creates a dependency passes its check in. */
   readinessChecks?: readonly ReadinessCheck[];
   /** The shared client, when a store is set to redis. A feature that needs it without it stops the boot. */
   redis?: Redis;
 };
 
-export const createApp = ({ env, rl, idempotency, readinessChecks = [], redis }: AppConfig) => {
+export const createApp = ({
+  env,
+  rl,
+  idempotency,
+  cache,
+  cacheOutbox,
+  readinessChecks = [],
+  redis,
+}: AppConfig) => {
   const container = createContainer();
   container.provide('env', () => env);
   if (redis) container.provide('redis', () => redis);
   container.provide('limit', () => rl.limit);
   container.provide('idempotent', () => idempotency.idempotent);
   container.provide('readinessChecks', () => readinessChecks);
+  container.provide('cache', () => cache);
+  if (cacheOutbox) container.provide('cacheOutbox', () => cacheOutbox);
   container.provide('authorize', () => createAuthorizeMiddleware);
 
   // Health sits outside the group that carries the global limit and the request timeout,

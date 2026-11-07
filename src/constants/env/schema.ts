@@ -27,6 +27,18 @@ import {
   RATE_LIMIT_STORES,
   RATE_LIMIT_STORE_ERROR_MODES,
 } from '#constants/rateLimit.constant';
+import {
+  CACHE_MAX_TTL_LIMIT_S,
+  CACHE_STORES,
+  DEFAULT_CACHE_MAX_TTL_S,
+  DEFAULT_CACHE_MEMORY_MAX_ENTRIES,
+  DEFAULT_CACHE_OP_TIMEOUT_MS,
+  DEFAULT_CACHE_OUTBOX_POLL_MS,
+  DEFAULT_CACHE_PRIMARY_CHECK_MS,
+  DEFAULT_CACHE_STORE,
+  MIN_CACHE_INTERVAL_MS,
+  MIN_CACHE_MEMORY_MAX_ENTRIES,
+} from '#constants/cache.constant';
 import { REGEX } from '#constants/regex.constant';
 import {
   AUTH_STORES,
@@ -197,6 +209,26 @@ const envSchema = z.preprocess(
       IDEMPOTENCY_MAX_BODY_BYTES: wholeNumber({ min: 1 }).default(
         DEFAULT_IDEMPOTENCY_MAX_BODY_BYTES,
       ),
+      CACHE_ENABLED: bool(true),
+      CACHE_STORE: z.enum(CACHE_STORES).default(DEFAULT_CACHE_STORE),
+      CACHE_MEMORY_MAX_ENTRIES: wholeNumber({ min: MIN_CACHE_MEMORY_MAX_ENTRIES }).default(
+        DEFAULT_CACHE_MEMORY_MAX_ENTRIES,
+      ),
+      CACHE_OP_TIMEOUT_MS: wholeNumber({ min: 1, max: MAX_TIMER_MS }).default(
+        DEFAULT_CACHE_OP_TIMEOUT_MS,
+      ),
+      // BentoCache remembers a tag invalidation for 10 days; no entry may outlive that record.
+      CACHE_MAX_TTL_S: wholeNumber({ min: 1, max: CACHE_MAX_TTL_LIMIT_S }).default(
+        DEFAULT_CACHE_MAX_TTL_S,
+      ),
+      CACHE_L1_ENABLED: bool(false),
+      CACHE_OUTBOX_POLL_MS: wholeNumber({ min: MIN_CACHE_INTERVAL_MS, max: MAX_TIMER_MS }).default(
+        DEFAULT_CACHE_OUTBOX_POLL_MS,
+      ),
+      CACHE_PRIMARY_CHECK_MS: wholeNumber({
+        min: MIN_CACHE_INTERVAL_MS,
+        max: MAX_TIMER_MS,
+      }).default(DEFAULT_CACHE_PRIMARY_CHECK_MS),
       JWT_SECRET: z
         .string()
         .min(JWT_SECRET_MIN_LENGTH, `Must be at least ${JWT_SECRET_MIN_LENGTH} characters`)
@@ -277,6 +309,22 @@ const envSchema = z.preprocess(
             'must be greater than REQUEST_HANDLER_TIMEOUT_MS ( REQUEST_HANDLER_TIMEOUT_MS < IDEMPOTENCY_LOCK_TTL_S )',
           );
       }
+
+      // Even with CACHE_ENABLED=false, since invalidations still go to the store.
+      if (e.CACHE_STORE === 'redis') {
+        if (!e.REDIS_URL) addIssue(['REDIS_URL'], 'Required when CACHE_STORE=redis');
+      }
+
+      // A slow store must leave the loader time to run before the handler times out.
+      if (
+        e.CACHE_ENABLED &&
+        e.REQUEST_HANDLER_TIMEOUT_MS > 0 &&
+        e.CACHE_OP_TIMEOUT_MS >= e.REQUEST_HANDLER_TIMEOUT_MS
+      )
+        addIssue(
+          ['CACHE_OP_TIMEOUT_MS'],
+          'must be less than REQUEST_HANDLER_TIMEOUT_MS ( CACHE_OP_TIMEOUT_MS < REQUEST_HANDLER_TIMEOUT_MS )',
+        );
 
       if (e.HTTP_KEEP_ALIVE_TIMEOUT_MS <= e.LB_IDLE_TIMEOUT_MS)
         addIssue(

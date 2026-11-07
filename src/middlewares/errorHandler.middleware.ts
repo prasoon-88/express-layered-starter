@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler, Request } from 'express';
 import { ENV_CONSTANTS } from '#constants/env/index';
+import { CACHE_CONTROL, HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
 import { AppError, InternalServerError } from '#errors';
 import { convertError } from '#errors/converter/index';
 import { logger } from '#lib/logger/index';
@@ -58,6 +59,9 @@ export const errorHandlerMiddleware: ErrorRequestHandler = (err: unknown, req, r
     },
     'Request Failed',
   );
+
+  // The route's rule describes its success response, so an error must never inherit a max-age.
+  res.set(HTTP_HEADERS.CACHE_CONTROL, CACHE_CONTROL.NO_STORE);
 
   if (wantsJson(req)) return res.status(error.statusCode).json(errorJsonResp);
 

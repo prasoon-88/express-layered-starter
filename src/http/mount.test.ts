@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { Server } from 'node:http';
 import express, { type RequestHandler, type Router } from 'express';
 import { listen } from '#testing/http';
+import { DEFAULT_GET_CACHE_POLICY } from './cachePolicy.ts';
 import { createContainer } from './container.ts';
 import { ContainerError, RouteDefinitionError } from './errors.ts';
 import { mount } from './mount.ts';
@@ -230,7 +231,13 @@ describe('mount: access', () => {
     );
 
     assert.deepEqual(manifest, [
-      { method: 'GET', path: '/open', access: open, controller: openController },
+      {
+        method: 'GET',
+        path: '/open',
+        access: open,
+        cache: DEFAULT_GET_CACHE_POLICY,
+        controller: openController,
+      },
       {
         method: 'DELETE',
         path: '/admin/:id',
@@ -321,6 +328,138 @@ describe('mount: access', () => {
           }),
         }),
       /GET \/me: No provider for "authenticate"/,
+    );
+  });
+});
+
+describe('mount: caching', () => {
+  it('gives a GET without a rule the default, and lists it in the manifest', async () => {
+    const { router, manifest } = build(
+      defineRoute({ method: 'get', path: '/x', access: open, handlers: [say('x')] }),
+    );
+    const url = await serve(router);
+
+    assert.equal((await fetch(`${url}/x`)).headers.get('Cache-Control'), 'private, no-cache');
+    assert.deepEqual(manifest[0]?.cache, DEFAULT_GET_CACHE_POLICY);
+  });
+
+  it('sets no Cache-Control on a non-GET without a rule', async () => {
+    const { router, manifest } = build(
+      defineRoute({ method: 'post', path: '/x', access: open, handlers: [say('x')] }),
+    );
+    const url = await serve(router);
+
+    assert.equal((await fetch(`${url}/x`, { method: 'POST' })).headers.get('Cache-Control'), null);
+    assert.equal('cache' in manifest[0]!, false);
+  });
+
+  it('sets the declared rule', async () => {
+    const { router, manifest } = build(
+      defineGroup('/', [
+        defineRoute({
+          method: 'get',
+          path: '/fresh',
+          access: open,
+          cache: { mode: 'fresh', maxAgeS: 60 },
+          handlers: [say('fresh')],
+        }),
+        defineRoute({
+          method: 'post',
+          path: '/token',
+          access: open,
+          cache: { mode: 'no-store' },
+          handlers: [say('token')],
+        }),
+      ]),
+    );
+    const url = await serve(router);
+
+    assert.equal((await fetch(`${url}/fresh`)).headers.get('Cache-Control'), 'public, max-age=60');
+    assert.equal(
+      (await fetch(`${url}/token`, { method: 'POST' })).headers.get('Cache-Control'),
+      'no-store',
+    );
+    assert.deepEqual(manifest[0]?.cache, { mode: 'fresh', maxAgeS: 60 });
+  });
+
+  it('sets the headers before pre and the access check, so a rejected caller gets them too', async () => {
+    const seenInPre: (string | undefined)[] = [];
+    const { router } = build(
+      defineRoute({
+        method: 'get',
+        path: '/me',
+        access: { strategy: 'authenticated' },
+        pre: [
+          (_req, res, next) => {
+            seenInPre.push(res.get('Cache-Control'));
+            next();
+          },
+        ],
+        handlers: [say('me')],
+      }),
+    );
+    const url = await serve(router);
+
+    const response = await fetch(`${url}/me`);
+
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-cache');
+    assert.equal(response.headers.get('Vary'), 'Authorization');
+    assert.deepEqual(seenInPre, ['private, no-cache']);
+  });
+
+  it('adds to a Vary header set earlier instead of replacing it', async () => {
+    const router = express.Router();
+    router.use((_req, res, next) => {
+      res.vary('Origin');
+      next();
+    });
+    router.use(
+      build(
+        defineRoute({
+          method: 'get',
+          path: '/me',
+          access: { strategy: 'authenticated' },
+          handlers: [say('me')],
+        }),
+      ).router,
+    );
+    const url = await serve(router);
+
+    const response = await fetch(`${url}/me`, { headers: { 'x-test-role': 'NORMAL' } });
+
+    assert.equal(response.headers.get('Vary'), 'Origin, Authorization');
+  });
+
+  it('refuses shared caches on a route that needs credentials, naming the route', () => {
+    failsWith(
+      () =>
+        build(
+          defineRoute({
+            method: 'get',
+            path: '/me',
+            access: { strategy: 'authenticated' },
+            cache: { mode: 'fresh', maxAgeS: 60, shared: true },
+            handlers: [say('me')],
+          }),
+        ),
+      /GET \/me: a route that needs credentials cannot be stored by shared caches \(shared: true\)/,
+    );
+  });
+
+  it('refuses a rule other than no-store on a non-GET, naming the route', () => {
+    failsWith(
+      () =>
+        build(
+          defineRoute({
+            method: 'post',
+            path: '/x',
+            access: open,
+            cache: { mode: 'revalidate' },
+            handlers: [say('x')],
+          }),
+        ),
+      /POST \/x: .*only no-store/,
     );
   });
 });

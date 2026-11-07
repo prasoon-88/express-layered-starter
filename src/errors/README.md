@@ -74,6 +74,7 @@ On `main` they run in this order:
 | [`zod.converter.ts`](converter/zod.converter.ts) | a `ZodError` from request validation in [`route()`](../lib/http/route.ts) | `400 BAD_REQUEST`, `details: [{ path, message }]` |
 | [`http.converter.ts`](converter/http.converter.ts) | body-parser errors (bad JSON, body too large, bad charset), and other `http-errors` with `expose: true` | `400` / `413` / `415`, or the error's own 4xx status |
 | [`jwt.converter.ts`](converter/jwt.converter.ts) | `TokenExpiredError`, `NotBeforeError`, `JsonWebTokenError` | `401` |
+| [`cache.converter.ts`](converter/cache.converter.ts) | `CacheLoadTimeoutError` (by name) from [`lib/cache`](../lib/cache/): a loader past its `hardTimeoutMs` | `503 SERVICE_UNAVAILABLE` |
 
 The Zod converter only ever sees *input* errors. `route()` wraps a `ZodError` thrown inside a handler in a plain `Error`, so that one is reported as a `500` (it means your own data failed a check), not as a `400` blaming the client.
 

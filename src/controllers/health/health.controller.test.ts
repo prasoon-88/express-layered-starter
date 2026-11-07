@@ -9,6 +9,7 @@ const { ServiceUnavailableError } = await import('#errors');
 const { lifecycleState } = await import('#lib/lifecycle/state');
 
 class FakeResponse {
+  req = {};
   headersSent = false;
   statusCode = 0;
   body: unknown;

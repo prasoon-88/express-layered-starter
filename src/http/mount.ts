@@ -1,4 +1,12 @@
 import { Router, type RequestHandler } from 'express';
+import { HTTP_HEADERS } from '#constants/http/httpHeaders.constant';
+import { concatenateStrings } from '#utils/concatenateStrings.util';
+import {
+  DEFAULT_GET_CACHE_POLICY,
+  cacheHeaders,
+  cachePolicyProblem,
+  type CachePolicy,
+} from './cachePolicy.ts';
 import type { Container } from './container.ts';
 import { RouteDefinitionError } from './errors.ts';
 import { duplicateParam, joinPaths, pathProblem, shadows } from './paths.ts';
@@ -17,6 +25,8 @@ export type RouteManifestEntry = Readonly<{
   method: Uppercase<RouteMethod>;
   path: string;
   access: Access;
+  /** The rule applied: the declared one, or the default for a GET. Absent on a non-GET without one. */
+  cache?: CachePolicy;
   module?: string;
   /** The last handler. Built with `route()`, it carries the schemas the OpenAPI builder reads. */
   controller: RequestHandler;
@@ -35,6 +45,16 @@ const fail = (message: string, cause?: unknown): never => {
 };
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+const cacheHeaderMiddleware = (access: Access, policy: CachePolicy): RequestHandler => {
+  const { [HTTP_HEADERS.VARY]: vary, ...headers } = cacheHeaders(access, policy);
+  return (_req, res, next) => {
+    res.set(headers);
+    // Appends, so a Vary set earlier (CORS sets Origin) survives.
+    if (vary) res.vary(vary);
+    next();
+  };
+};
 
 const isNode = (node: unknown): node is RouteNode =>
   typeof node === 'object' &&
@@ -118,7 +138,7 @@ export const mount = ({ container, strategies, root }: MountOptions) => {
   collectModules(root, modules);
   registerModules(container, modules);
 
-  const strategyNames = Object.keys(strategies).join(', ');
+  const strategyNames = concatenateStrings(Object.keys(strategies), ', ');
   const registered = new Map<RouteMethod, string[]>();
 
   const resolve = (node: unknown, where: string, insideModule?: string) => {
@@ -146,7 +166,7 @@ export const mount = ({ container, strategies, root }: MountOptions) => {
     const under = base || '/';
     if (!ROUTE_METHODS.includes(route.method))
       fail(
-        `Route "${String(route.path)}" under ${under}: method "${String(route.method)}" must be one of ${ROUTE_METHODS.join(', ')}`,
+        `Route "${String(route.path)}" under ${under}: method "${String(route.method)}" must be one of ${concatenateStrings(ROUTE_METHODS, ', ')}`,
       );
     const method = route.method.toUpperCase() as Uppercase<RouteMethod>;
 
@@ -176,6 +196,11 @@ export const mount = ({ container, strategies, root }: MountOptions) => {
     const accessProblem = strategy.problem?.(rule);
     if (accessProblem) fail(`${label}: ${accessProblem}`);
 
+    const cacheProblem = cachePolicyProblem(method, rule, route.cache);
+    if (cacheProblem) fail(`${label}: ${cacheProblem}`);
+    const cache = route.cache ?? (method === 'GET' ? DEFAULT_GET_CACHE_POLICY : undefined);
+    const caching = cache ? [cacheHeaderMiddleware(rule, cache)] : [];
+
     const pre = checkHandlers(route.pre, `${label} pre`);
     const handlers = checkHandlers(route.handlers, `${label} handlers`, 1);
 
@@ -202,11 +227,12 @@ export const mount = ({ container, strategies, root }: MountOptions) => {
         method,
         path,
         access: Object.freeze({ ...rule }),
+        ...(cache && { cache }),
         ...(module && { module }),
         controller: handlers[handlers.length - 1]!,
       }),
     );
-    parent[route.method](route.path, ...pre, ...guards, ...handlers);
+    parent[route.method](route.path, ...caching, ...pre, ...guards, ...handlers);
   };
 
   const mountGroup = (parent: Router, group: GroupDef, base: string, module?: string) => {

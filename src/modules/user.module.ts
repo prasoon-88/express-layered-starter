@@ -16,7 +16,8 @@ export const userModule = defineModule({
   name: 'user',
   providers: {
     userRepository: () => createUserRepository(),
-    userService: (get) => createUserService({ userRepository: get('userRepository') }),
+    userService: (get) =>
+      createUserService({ userRepository: get('userRepository'), cache: get('cache') }),
     userController: (get) => createUserController({ userService: get('userService') }),
   },
   needs: ['userController', 'limit', 'idempotent'],

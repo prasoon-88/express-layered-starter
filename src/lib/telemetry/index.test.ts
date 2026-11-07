@@ -210,7 +210,7 @@ describe('OpenTelemetry, end to end', { skip: redisSkip }, () => {
         redisSpans.some((s) => s.traceId === TRACE_ID),
         'the rate limit check, in the request',
       );
-      const commandSpans = redisSpans.filter((s) => s.name !== 'redis-connect');
+      const commandSpans = redisSpans.filter((s) => s.name !== 'connect');
       assert.ok(commandSpans.length > 0, 'redis command spans exported');
       // A bare command name (`EVAL`, `HGETALL`, `MULTI` for a transaction): no key, no argument.
       for (const span of commandSpans)

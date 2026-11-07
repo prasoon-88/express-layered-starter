@@ -49,7 +49,7 @@ const SUCCESS_DESCRIPTIONS: Readonly<Record<number, string>> = {
   [HTTP_STATUS.ACCEPTED]: 'Accepted',
 };
 
-// The same `{ success, message, data, requestId }` that buildSuccessBody sends.
+// The same `{ success, message, data, requestId }` that successEnvelope.ts builds.
 const successEnvelope = (data: JsonSchema) => ({
   type: 'object',
   properties: {
