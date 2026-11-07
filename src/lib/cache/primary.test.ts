@@ -27,6 +27,18 @@ const until = async (condition: () => boolean, what: string) => {
   }
 };
 
+/** A meter that keeps what the guard counts, as `name reason`. */
+const recordingMeter = () => {
+  const counted: string[] = [];
+  const meter = {
+    createCounter: (name: string) => ({
+      add: (_value: number, attributes?: { reason?: string }) =>
+        counted.push(attributes?.reason ? `${name} ${attributes.reason}` : name),
+    }),
+  } as unknown as NonNullable<Parameters<typeof createPrimaryGuard>[1]['meter']>;
+  return { meter, counted };
+};
+
 const runIdOf = async (redis: Redis) => /^run_id:(\w+)/m.exec(await redis.info('server'))![1]!;
 
 describe('createPrimaryGuard', { skip: redisSkip }, () => {
@@ -46,8 +58,8 @@ describe('createPrimaryGuard', { skip: redisSkip }, () => {
     await closeRedisClient(redis);
   });
 
-  const guardFor = (epochKey: string, log: Logger = silent) =>
-    createPrimaryGuard(redis, { epochKey, epochTtlMs: 60_000, checkMs: 60_000, log });
+  const guardFor = (epochKey: string, log: Logger = silent, meter = recordingMeter().meter) =>
+    createPrimaryGuard(redis, { epochKey, epochTtlMs: 60_000, checkMs: 60_000, log, meter });
 
   it('is unusable until it has checked, then ties the epoch to this server', async () => {
     const epochKey = `epoch-${randomUUID()}`;
@@ -64,7 +76,8 @@ describe('createPrimaryGuard', { skip: redisSkip }, () => {
   it('keeps an epoch made on this server, and renews one made on another', async () => {
     const epochKey = `epoch-${randomUUID()}`;
     const { log, warnings } = recordingLog();
-    const guard = guardFor(epochKey, log);
+    const { meter, counted } = recordingMeter();
+    const guard = guardFor(epochKey, log, meter);
 
     await guard.check();
     const ours = await redis.get(epochKey);
@@ -78,21 +91,28 @@ describe('createPrimaryGuard', { skip: redisSkip }, () => {
     assert.notEqual(renewed, 'another-server/old-epoch');
     assert.match(renewed!, new RegExp(`^${await runIdOf(redis)}/`));
     assert.equal(warnings.length, 2, 'renewed twice: when first made, and for the new server');
+    assert.deepEqual(counted, [
+      'cache.epoch.renewals created',
+      'cache.epoch.renewals server_changed',
+    ]);
   });
 
   it('renews the epoch once, however many instances see the new server at once', async () => {
     const epochKey = `epoch-${randomUUID()}`;
     await redis.set(epochKey, 'another-server/old-epoch');
     const { log, warnings } = recordingLog();
-    const guards = Array.from({ length: 5 }, () => guardFor(epochKey, log));
+    const { meter, counted } = recordingMeter();
+    const guards = Array.from({ length: 5 }, () => guardFor(epochKey, log, meter));
 
     await Promise.all(guards.map((guard) => guard.check()));
     assert.equal(warnings.length, 1);
+    assert.deepEqual(counted, ['cache.epoch.renewals server_changed']);
     assert.ok(guards.every((guard) => guard.usable()));
   });
 
   it('stays unusable, and says why, while it cannot check', async () => {
     const { log, errors } = recordingLog();
+    const { meter, counted } = recordingMeter();
     const failing = {
       info: () => Promise.reject(new Error('INFO not allowed')),
     } as unknown as Redis;
@@ -101,10 +121,12 @@ describe('createPrimaryGuard', { skip: redisSkip }, () => {
       epochTtlMs: 60_000,
       checkMs: 60_000,
       log,
+      meter,
     });
     await guard.check();
     assert.equal(guard.usable(), false);
     assert.equal(errors.length, 1);
+    assert.deepEqual(counted, ['cache.epoch.check_failures']);
   });
 
   it('is unusable from a disconnect until it has checked the server it reconnected to', async () => {

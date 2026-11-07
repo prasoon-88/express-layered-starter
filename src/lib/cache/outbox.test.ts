@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import pino from 'pino';
+import { cacheOutboxContract } from '#testing/cacheOutboxContract';
 import { createMemoryCacheOutbox, createOutboxRelay, type CacheOutboxStore } from './outbox.ts';
 import type { CacheTag } from './spec.ts';
 
@@ -9,43 +10,54 @@ const silent = pino({ level: 'silent' });
 const tag = (name: string) => JSON.stringify([name]) as CacheTag;
 
 describe('createMemoryCacheOutbox', () => {
-  it('hands an entry to one claimer until its lease runs out, and forgets it once removed', async () => {
-    let now = 1_000;
-    const outbox = createMemoryCacheOutbox({ now: () => now });
-    outbox.enqueue([tag('a'), tag('b')]);
+  cacheOutboxContract(() => {
+    const store = createMemoryCacheOutbox();
+    return Promise.resolve({
+      store,
+      enqueue: (tags) => {
+        store.enqueue(tags);
+        return Promise.resolve();
+      },
+    });
+  });
+
+  it('records nothing for an empty list of tags', async () => {
+    const outbox = createMemoryCacheOutbox();
     outbox.enqueue([]);
-
-    const [entry, ...rest] = await outbox.claim(10, 500);
-    assert.deepEqual(entry?.tags, [tag('a'), tag('b')]);
-    assert.deepEqual(rest, [], 'an empty enqueue records nothing');
-    assert.deepEqual(await outbox.claim(10, 500), [], 'leased');
-
-    now += 500;
-    assert.equal(
-      (await outbox.claim(10, 500)).length,
-      1,
-      'handed out again once the lease ran out',
-    );
-
-    await outbox.remove([entry.id]);
-    now += 500;
     assert.deepEqual(await outbox.claim(10, 500), []);
   });
-
-  it('claims at most the limit', async () => {
-    const outbox = createMemoryCacheOutbox();
-    for (const name of ['a', 'b', 'c']) outbox.enqueue([tag(name)]);
-    assert.equal((await outbox.claim(2, 500)).length, 2);
-    assert.equal((await outbox.claim(2, 500)).length, 1);
-  });
 });
+
+/** A meter that keeps what the relay records, and runs its backlog callback on demand. */
+const recordingMeter = () => {
+  const counts: { value: number; outcome: unknown }[] = [];
+  // Gauges are their names here, as createObservableGauge below returns them.
+  const observed = new Map<string, number>();
+  let callback:
+    ((result: { observe: (gauge: string, value: number) => void }) => unknown) | undefined;
+  const meter = {
+    createCounter: () => ({
+      add: (value: number, attributes?: { outcome?: unknown }) =>
+        counts.push({ value, outcome: attributes?.outcome }),
+    }),
+    createObservableGauge: (name: string) => name,
+    addBatchObservableCallback: (cb: typeof callback) => (callback = cb),
+    removeBatchObservableCallback: () => (callback = undefined),
+  } as unknown as NonNullable<Parameters<typeof createOutboxRelay>[0]['meter']>;
+  const collect = async () => {
+    observed.clear();
+    await callback?.({ observe: (gauge, value) => observed.set(gauge, value) });
+    return Object.fromEntries(observed);
+  };
+  return { meter, counts, collect, registered: () => callback !== undefined };
+};
 
 describe('createOutboxRelay', () => {
   const relayFor = (
     store: CacheOutboxStore,
     invalidate: (...tags: CacheTag[]) => Promise<void>,
-    { pollMs = 60_000, leaseMs = 60_000 } = {},
-  ) => createOutboxRelay({ store, invalidate, pollMs, leaseMs, batchSize: 2, log: silent });
+    { pollMs = 60_000, leaseMs = 60_000, meter = recordingMeter().meter } = {},
+  ) => createOutboxRelay({ store, invalidate, pollMs, leaseMs, batchSize: 2, log: silent, meter });
 
   const recordingInvalidate = () => {
     const delivered: CacheTag[] = [];
@@ -162,5 +174,45 @@ describe('createOutboxRelay', () => {
     outbox.enqueue([tag('a')]);
     await relay.stop();
     assert.equal((await outbox.claim(10, 0)).length, 1);
+  });
+  it('counts what it delivered and what failed, and reports the backlog while running', async () => {
+    let now = 1_000;
+    const outbox = createMemoryCacheOutbox({ now: () => now });
+    const { meter, counts, collect, registered } = recordingMeter();
+    let failing = true;
+    const relay = relayFor(
+      outbox,
+      () => (failing ? Promise.reject(new Error('store down')) : Promise.resolve()),
+      { leaseMs: 0, meter },
+    );
+    outbox.onEnqueue?.(relay.kick);
+    outbox.enqueue([tag('a')]);
+    now += 250;
+    relay.start();
+    await sleep(5);
+
+    assert.deepEqual(await collect(), {
+      'cache.outbox.pending': 1,
+      'cache.outbox.oldest_age': 250,
+    });
+    failing = false;
+    await relay.stop();
+    assert.deepEqual(counts, [
+      { value: 1, outcome: 'failed' },
+      { value: 1, outcome: 'delivered' },
+    ]);
+    assert.equal(registered(), false, 'the backlog callback is removed on stop');
+  });
+
+  it('reports no backlog, without failing, when the store cannot tell', async () => {
+    const { meter, collect } = recordingMeter();
+    const store: CacheOutboxStore = {
+      ...createMemoryCacheOutbox(),
+      backlog: () => Promise.reject(new Error('store down')),
+    };
+    const relay = relayFor(store, () => Promise.resolve(), { meter });
+    relay.start();
+    assert.deepEqual(await collect(), {});
+    await relay.stop();
   });
 });

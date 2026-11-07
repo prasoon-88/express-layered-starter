@@ -224,9 +224,9 @@ A typed, schema-checked layer over [BentoCache](https://bentocache.dev), pinned 
 | [`spec.ts`](cache/spec.ts) | `defineCacheSpec`: a name, a plain-JSON schema (hashed into every key), timing, tag builders and `clusterLockMs`. `encodeParts`: keys and tags as JSON arrays. Pure: no store, so any module may import a spec |
 | [`client.ts`](cache/client.ts) | `createCache(…)`: `cache.entity(spec)` and `cache.invalidate`. Builds each key from the tags' versions, checks the schema on the way in and out, takes the key lock, counts `cache.lookups`. An entity works out its BentoCache timing once, when bound |
 | [`versions.ts`](cache/versions.ts) | `TagVersions`: a token per tag, and `bump`. In memory, or on Redis with one script call that reads every token of a key and the epoch |
-| [`primary.ts`](cache/primary.ts) | `PrimaryGuard`: ties the cache epoch to the `run_id` of the Redis server, and keeps the cache unused until it has checked the server this connection talks to |
+| [`primary.ts`](cache/primary.ts) | `PrimaryGuard`: ties the cache epoch to the `run_id` of the Redis server (read with `INFO`), keeps the cache unused until it has checked the server this connection talks to, and counts `cache.epoch.*` |
 | [`lock.ts`](cache/lock.ts) | `KeyLock`: `SET NX PX` per key, released by a script only by its own token |
-| [`outbox.ts`](cache/outbox.ts) | `CacheOutboxStore` (the port a database store implements), the memory outbox, and the relay that delivers it |
+| [`outbox.ts`](cache/outbox.ts) | `CacheOutboxStore` (the port a database store implements: `claim`, `remove`, `backlog`), the memory outbox, and the relay that delivers it and reports `cache.outbox.*`. Every store must pass [`cacheOutboxContract`](../testing/cacheOutboxContract.ts): leases, limits, removal, backlog |
 | [`errors.ts`](cache/errors.ts) | `CacheConfigError`: a spec, key, tag or option that can never work. `CacheLoadTimeoutError`: a loader past `hardTimeoutMs` |
 | [`index.ts`](cache/index.ts) | `initCache` and the public exports |
 

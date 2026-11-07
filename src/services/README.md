@@ -110,7 +110,7 @@ export const createPostService = ({ postRepository, cache }: PostServiceDeps) =>
 }
 ```
 
-`app.ts` registers `cache` and `cacheOutbox` in the container, so a module wires them like any other key: `postRepository: (get) => createPostRepository({ cacheOutbox: get('cacheOutbox') })`. On `main` the outbox is in memory and `enqueue(tags)` takes no transaction: an in-memory repository calls it in the same synchronous step as its write. A test builds a real cache with `initCache(parseEnv({ NODE_ENV: 'test' }), logger).cache`: the memory store, no Redis.
+`app.ts` registers `cache` and `cacheOutbox` in the container, so a module wires them like any other key: `postRepository: (get) => createPostRepository({ cacheOutbox: get('cacheOutbox') })`. On `main` the outbox is in memory and `enqueue(tags)` takes no transaction: an in-memory repository calls it in the same synchronous step as its write. A database store must pass [`cacheOutboxContract`](../testing/cacheOutboxContract.ts), run against the real database. A test builds a real cache with `initCache(parseEnv({ NODE_ENV: 'test' }), logger).cache`: the memory store, no Redis.
 
 - **One spec per shape.** A post and a list of posts are two specs; each has its own schema, so a hit is checked against what it really is.
 - **Tags are what you invalidate together.** A list that shows a post's fields carries a tag the post's write invalidates too (`recent` above). However many tags a query names, their versions are read in one round trip.

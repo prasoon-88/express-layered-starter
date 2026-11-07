@@ -504,7 +504,7 @@ await cache.invalidate(postCacheSpec.tags.one(id));
 
 - **Invalidations fail loud.** `invalidate` rejects when the store did not take a new token, because the old value may then still be served. Let it fail the request, or record the tags in the outbox, whose relay retries until it succeeds.
 - **The outbox closes the gap between a write and its invalidation.** A repository records the tags with `cacheOutbox.enqueue` in the same step as its write (in the same transaction, on a database), so they commit together or not at all. A relay in every instance delivers them: at once after an enqueue, and every `CACHE_OUTBOX_POLL_MS` for what nobody announced or what failed. An entry is removed only once the cache took it, so a crash anywhere leaves it to the next relay. Delivering one twice only makes a value load twice. On `main` the outbox is in memory, as the repositories are; a database branch stores it in a table (see [`lib/cache/outbox.ts`](src/lib/cache/outbox.ts)).
-- **A Redis failover cannot bring old values back.** Redis replicates in the background, so a new primary can lack the last tokens the old one took. Every key includes the cache epoch, which records the `run_id` of the Redis server that made it. On start, after every reconnect, and every `CACHE_PRIMARY_CHECK_MS`, each instance checks it; on a server with another `run_id` the first to look makes a new epoch, which moves every key at once. Until its check passes, an instance reads nothing from the cache: every lookup goes to its loader, and `/health/ready` reports `cache-store` down (non-critical). A failover always drops the client's connection when Redis is reached directly or through Sentinel, so it is noticed at once; behind a proxy that keeps connections open, it is noticed at the next periodic check.
+- **A Redis failover cannot bring old values back.** Redis replicates in the background, so a new primary can lack the last tokens the old one took. Every key includes the cache epoch, which records the `run_id` of the Redis server that made it. On start, after every reconnect, and every `CACHE_PRIMARY_CHECK_MS`, each instance checks it; on a server with another `run_id` the first to look makes a new epoch, which moves every key at once. Until its check passes, an instance reads nothing from the cache: every lookup goes to its loader, and `/health/ready` reports `cache-store` down (non-critical). A failover always drops the client's connection when Redis is reached directly or through Sentinel, so it is noticed at once; behind a proxy that keeps connections open, it is noticed at the next periodic check. **The check needs Redis's `INFO` command.** A managed Redis or a proxy that blocks it leaves the cache unused for good: every read goes to its loader, `cache.epoch.check_failures` rises, and `/health/ready` reports `cache-store` down. Safe, but the cache does nothing, so allow `INFO` for the cache's user.
 - **`clusterLockMs` loads a hot key once across instances.** On a miss the first instance takes a lock on the key and loads; the others wait up to `clusterLockMs` for its value, return it without storing it again, and load it themselves if it does not come. The lock only saves work: a lapsed lock or a failed Redis means the key is loaded twice, never a wrong value. It costs one round trip per miss, so set it only for keys that are hot and slow to load.
 - **Reads fail open.** A store error, or a Redis command slower than `CACHE_OP_TIMEOUT_MS`, is logged and counted, and `load` runs. A cache outage makes requests slower, never failed. What `load` throws is rethrown unchanged, and a load past `hardTimeoutMs` rejects with `CacheLoadTimeoutError`, which the error handler answers with `503 SERVICE_UNAVAILABLE`.
 - **Concurrent queries for one key share one load** within an instance, and across instances with `clusterLockMs`.
@@ -515,7 +515,16 @@ await cache.invalidate(postCacheSpec.tags.one(id));
 - **`staleS` (default 0) trades freshness for availability.** Past `ttlS`, a value may still be served for `staleS` seconds: at once while it refreshes in the background (`softTimeoutMs: 0`, the default), or after waiting `softTimeoutMs` for the loader, and whenever the loader fails. An invalidated value is never served stale: an invalidation moves the key. `hardTimeoutMs` caps how long a caller waits for a load.
 - **Keys and tags are JSON arrays**, so no two different keys or tags share a string. Parts must be strings, finite numbers or booleans (`CacheConfigError` otherwise).
 - **`CACHE_ENABLED=false` turns off reads and writes only.** Invalidations still reach the store, so an instance enabled later, or one still enabled during a rolling deploy, never serves a value invalidated meanwhile.
-- **One metric:** the counter `cache.lookups`, with `entity` (the spec's name) and `outcome`: `hit`, `miss`, `shared` (another instance's load), `invalid`, `unstorable`, `error` or `bypass` (the store not checked yet).
+- **Metrics, and what to alert on:**
+
+  | Metric | What it says | Alert when |
+  |---|---|---|
+  | `cache.lookups` (counter, by `entity` and `outcome`) | `hit`, `miss`, `shared` (another instance's load), `invalid`, `unstorable`, `error`, or `bypass` (the store not checked yet) | `error` or `bypass` stays up: reads are going to the loaders |
+  | `cache.outbox.pending` (gauge) | invalidations waiting to be delivered | it keeps growing |
+  | `cache.outbox.oldest_age` (gauge, ms) | how long the oldest has waited | it passes a few poll intervals: values it covers are being served past the write that changed them |
+  | `cache.outbox.deliveries` (counter, by `outcome`) | entries `delivered`, or `failed` and left for a retry | `failed` keeps rising |
+  | `cache.epoch.renewals` (counter, by `reason`) | `created` (the first epoch on a Redis), or `server_changed` (a failover or a restart: every key moved) | any `server_changed`: expect a burst of misses, and check what happened to Redis |
+  | `cache.epoch.check_failures` (counter) | checks of the Redis server that failed; reads skip the cache meanwhile | it keeps rising |
 
 **Stores**
 
@@ -524,6 +533,7 @@ await cache.invalidate(postCacheSpec.tags.one(id));
 | Shared by replicas | no: an invalidation reaches only the instance that ran it. Production logs a warning | yes | yes |
 | Where a hit comes from | process memory | Redis: the tokens in one script call, then the entry | the tokens from Redis, the entry from process memory after the first read |
 | Staleness after an invalidation elsewhere | until the TTL | none | none: the tokens are always read from Redis, so an invalidated key is never looked up |
+| While Redis is down | — | every read goes to its loader | the same: the memory layer is skipped too, since without the tokens no key can be built. Correctness over availability: a memory copy might be one an invalidation, made during the outage, should have replaced |
 | Connections | — | one of its own, with `CACHE_OP_TIMEOUT_MS` as a per-command timeout | plus a publisher and a subscriber for BentoCache's bus, which drops other instances' copy of a key loaded again after its TTL |
 | Size | `CACHE_MEMORY_MAX_ENTRIES` entries, least recently used evicted first | Redis's own memory limit | both |
 | No client | — | `initCache` throws, even with `CACHE_ENABLED=false`, rather than fall back to memory | same |
@@ -570,7 +580,7 @@ Everything else uses OpenTelemetry's [standard variables](https://opentelemetry.
 | Signal | What is recorded |
 |--------|------------------|
 | Traces | one server span per request, named by its route (`POST /api/v1/auth/login`), with `http.route`, the status and `app.request_id`; the Express handler span under it; a client span per Redis command and per outgoing `node:http` request. An incoming `traceparent` is continued |
-| Metrics | the `http.server.request.duration` histogram by route and status; the `cache.lookups` counter by entity and outcome (see [Caching](#caching)); Node runtime metrics (event loop, heap, GC) |
+| Metrics | the `http.server.request.duration` histogram by route and status; the cache's `cache.lookups`, `cache.outbox.*` and `cache.epoch.*` (see [Caching](#caching), with what to alert on); Node runtime metrics (event loop, heap, GC) |
 | Logs | stay on stdout as before. Inside a traced request each line gains `trace_id`, `span_id` and `trace_flags`, so a log search finds the trace and the trace finds its logs |
 
 **How it is wired**
